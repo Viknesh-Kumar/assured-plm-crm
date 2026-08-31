@@ -1,0 +1,28 @@
+{
+  "name": "assured-plm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Product Lifecycle Management (AGC-BRD-PLM-001) and CRM & Content Calendar (AGC-BRD-CRM-001) for Assured Grow Consultancy",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node app/server.mjs",
+    "test": "node app/test.mjs && node app/crm-test.mjs",
+    "reset": "node -e \"import('node:fs').then(f=>{try{['plm.db','plm.db-wal','plm.db-shm'].forEach(x=>f.rmSync(x,{force:true}));console.log('database removed')}catch(e){console.error(e)}})\"",
+    "test:plm": "node app/test.mjs",
+    "test:crm": "node app/crm-test.mjs",
+    "validate": "node app/validate-stages.mjs",
+    "demo": "node app/plm-demo.mjs && node app/crm-demo.mjs",
+    "demo:plm": "node app/plm-demo.mjs",
+    "demo:crm": "node app/crm-demo.mjs",
+    "smoke": "node app/smoke.mjs",
+    "build": "node deploy/vercel-build.mjs",
+    "edge": "node deploy/vercel-dev.mjs",
+    "catalyst:schema": "node deploy/catalyst-schema.mjs",
+    "catalyst:schema:json": "node deploy/catalyst-schema.mjs --json",
+    "catalyst:provision": "node deploy/catalyst-provision.mjs",
+    "catalyst:plan": "node deploy/catalyst-provision.mjs --dry-run"
+  }
+}

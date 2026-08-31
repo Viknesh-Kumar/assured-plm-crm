@@ -1,0 +1,23 @@
+# the SQLite database lives on the Railway volume, never in the repo
+plm.db
+plm.db-wal
+plm.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+node_modules/
+deploy/dist/
+deploy/.catalyst-ids.json
+.env
+.env.*
+.DS_Store
+Thumbs.db
+
+# Source business documents — deliberately kept out of the repo.
+# The BRDs, the tracker and revenue workbooks, the CRM spec and the brand assets stay local.
+*.docx
+*.xlsx
+*.pptx
+Assured CRM/
+*prototype*.html

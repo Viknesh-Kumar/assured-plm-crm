@@ -1,0 +1,8 @@
+{
+  "name": "plm_api",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.js",
+  "description": "Assured PLM & CRM API — Catalyst Advanced I/O function",
+  "dependencies": {}
+}

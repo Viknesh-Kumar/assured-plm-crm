@@ -1,0 +1,7 @@
+{
+  "project_name": "assured-plm",
+  "functions": [
+    { "name": "plm_api", "path": "functions/plm_api", "type": "advancedio", "stack": "node22" }
+  ],
+  "client": { "name": "assured-client", "source": "../dist" }
+}

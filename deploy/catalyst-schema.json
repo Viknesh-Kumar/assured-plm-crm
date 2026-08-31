@@ -1,0 +1,3220 @@
+{
+  "generated": "2026-08-30T18:53:56.814Z",
+  "tables": [
+    {
+      "table_name": "users",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "email",
+          "data_type": "varchar",
+          "max_length": 320,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "title",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "password_hash",
+          "data_type": "encrypted text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "must_change",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "last_login",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "audit",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "entity",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "entity_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "action",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "field",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "old_value",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "new_value",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "summary",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "channel",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "mode",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "person_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "content_type",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "content_channel",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "colour",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "offering",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "code",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "revenue_category",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "industry",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "content",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "content_date",
+          "source_column": "date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "title",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "type_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_type",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "channel_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_channel",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "person_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "offering_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "offering",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "industry_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "industry",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "theme",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "status",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "Planned"
+        },
+        {
+          "column_name": "url",
+          "data_type": "varchar",
+          "max_length": 320,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        }
+      ]
+    },
+    {
+      "table_name": "roles",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "description",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "permissions",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false",
+          "default_value": ""
+        },
+        {
+          "column_name": "is_system",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "stages",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "seq",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "track",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "purpose",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "definition",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "owner_role_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "roles",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "approver_role_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "roles",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "target_days",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "ageing_days",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "escalate_role_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "roles",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "entry_condition",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "exit_condition",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "products",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "code",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "problem",
+          "data_type": "text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "origin",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "route",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "client_source",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "owner_user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "entry_stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "entry_override_reason",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "track",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "development"
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "status",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "Active"
+        },
+        {
+          "column_name": "next_action",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "action_owner_user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "target_date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "revised_date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "stage_entry_date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "actual_completion_date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "effort_budget",
+          "data_type": "double",
+          "decimal_digits": 2,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "closure_reason",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "predecessor_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "spec_link",
+          "data_type": "varchar",
+          "max_length": 320,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "hold_resume_date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "hold_reason",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "submitted_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "submitted_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "content_prompt",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "source",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "title",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "detail",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "due_date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "offering_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "offering",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "status",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "Open"
+        },
+        {
+          "column_name": "content_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "resolved_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "resolved_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "resolve_note",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "exit_criteria",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "seq",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "text",
+          "data_type": "text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        }
+      ]
+    },
+    {
+      "table_name": "criterion_status",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "criterion_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "exit_criteria",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "met",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "evidence",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "marked_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "marked_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "customer_segment",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "date_revisions",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "old_date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "new_date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "reason",
+          "data_type": "text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "deployments",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "client_ref",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "deployed_on",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "revenue",
+          "data_type": "double",
+          "decimal_digits": 2,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "confirmed",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "confirmed_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "confirmed_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "note",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "effort_entries",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "period",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "days",
+          "data_type": "double",
+          "decimal_digits": 2,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "consultant_user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "estimated",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "note",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "logged_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "gate_approvals",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "decision",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "actor_user_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "role_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "roles",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "reason",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "submitted_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "kill_requests",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "reason",
+          "data_type": "text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "recommended_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "decision",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "closure_reason",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "decided_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "decided_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "stage_template",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "code",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "source_ref",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "pipeline",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "offering_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "offering",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "template_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stage_template",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "owner_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "pipeline_stage",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "pipeline_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "pipeline",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "seq",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "band",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "is_gate",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "lead",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "company",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "pipeline_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "pipeline",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "pipeline_stage",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "stage_entered_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "owner_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "offering_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "offering",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "industry_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "industry",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "segment_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "customer_segment",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "channel_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "channel",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "source",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "source_override",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "source_override_reason",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "customer",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "designation",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "location",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "contact",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "email",
+          "data_type": "varchar",
+          "max_length": 320,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "activity",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "primary_content_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "lost",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "lost_reason",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "lost_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "lost_stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "lead_content_touch",
+      "composite_key": [
+        "lead_id",
+        "content_id"
+      ],
+      "columns": [
+        {
+          "column_name": "lead_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "lead",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "content_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "is_primary",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "added_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "added_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        }
+      ]
+    },
+    {
+      "table_name": "lead_field",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "field_key",
+          "source_column": "key",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "label",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "type",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "list_source",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "locked",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "help",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "custom",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "lead_field_value",
+      "composite_key": [
+        "lead_id",
+        "field_key"
+      ],
+      "columns": [
+        {
+          "column_name": "lead_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "lead",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "field_key",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "value",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "lead_note",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "lead_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "lead",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "body",
+          "data_type": "text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "author_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "at",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "lead_stage_history",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "lead_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "lead",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "from_seq",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "to_seq",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "stage_name_snapshot",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "actor_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "at",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "reason",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "market_changes",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "from_stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "to_stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "evidence",
+          "data_type": "text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "review_ref",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "notifications",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "kind",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "text",
+          "data_type": "text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "read",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "owner_changes",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "from_user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "to_user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "reason",
+          "data_type": "text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "pipeline_industry",
+      "composite_key": [
+        "pipeline_id",
+        "industry_id"
+      ],
+      "columns": [
+        {
+          "column_name": "pipeline_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "pipeline",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "industry_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "industry",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        }
+      ]
+    },
+    {
+      "table_name": "settings",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "setting_key",
+          "source_column": "key",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "value",
+          "data_type": "text",
+          "is_mandatory": "true",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "label",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "kind",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "stage_history",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "product_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "products",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "track",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "entered_on",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "exited_on",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "decision",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "from_stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "actor_user_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "note",
+          "data_type": "text",
+          "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "correction_of",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stage_history",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "stage_participant",
+      "composite_key": [
+        "stage_id",
+        "role_id"
+      ],
+      "columns": [
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stages",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "role_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "roles",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        }
+      ]
+    },
+    {
+      "table_name": "stage_requirement",
+      "composite_key": [
+        "pipeline_stage_id",
+        "field_key"
+      ],
+      "columns": [
+        {
+          "column_name": "pipeline_stage_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "pipeline_stage",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "field_key",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "level",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "stage_template_stage",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "template_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "stage_template",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "seq",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "band",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "is_gate",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "user_roles",
+      "composite_key": [
+        "user_id",
+        "role_id"
+      ],
+      "columns": [
+        {
+          "column_name": "user_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "role_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "roles",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        }
+      ]
+    }
+  ]
+}

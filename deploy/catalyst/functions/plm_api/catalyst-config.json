@@ -1,0 +1,14 @@
+{
+  "deployment": {
+    "name": "plm_api",
+    "stack": "node22",
+    "type": "AdvancedIO",
+    "target": "index.js",
+    "memory": 512,
+    "timeout": 30
+  },
+  "env_variables": {
+    "PLM_STORE": "catalyst",
+    "PLM_ADMIN_EMAIL": "producthead@assured.local"
+  }
+}

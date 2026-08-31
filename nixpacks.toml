@@ -1,0 +1,9 @@
+# node:sqlite needs Node 22.5+. Pin it so a Nixpacks default never silently downgrades the runtime.
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = ["echo 'no dependencies to install'"]
+
+[start]
+cmd = "node app/server.mjs"
