@@ -5,7 +5,7 @@
   "description": "Product Lifecycle Management (AGC-BRD-PLM-001) and CRM & Content Calendar (AGC-BRD-CRM-001) for Assured Grow Consultancy",
   "type": "module",
   "engines": {
-    "node": ">=22.5"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "start": "node app/server.mjs",

@@ -1,6 +1,7 @@
-# node:sqlite needs Node 22.5+. Pin it so a Nixpacks default never silently downgrades the runtime.
+# node:sqlite is only unflagged from Node 23.4 and stable in 24. Pin 24 so no builder default
+# silently lands on 22, where the import fails outright.
 [phases.setup]
-nixPkgs = ["nodejs_22"]
+nixPkgs = ["nodejs_24"]
 
 [phases.install]
 cmds = ["echo 'no dependencies to install'"]
