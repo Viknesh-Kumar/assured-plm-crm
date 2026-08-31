@@ -487,9 +487,9 @@ export function renderLogin(msg) {
     <div class="field"><label for="password">Password</label>
       <input class="inp" id="password" name="password" type="password" required autocomplete="current-password"></div>
     <button class="btn brand" style="width:100%;height:2.25rem" type="submit">Sign in</button>
-    <div class="hint"><b>Seeded accounts</b> — solutions.head@assured.local · business.head@assured.local ·
-      ceo@assured.local · finance.head@assured.local · projects.head@assured.local · consultant1@assured.local.
-      Default password <span class="mono">Assured@2026</span>. Change it under Setup at go-live.</div>
+    <div class="hint"><b>First sign-in</b> — a clean install carries one account,
+      <span class="mono">producthead@assured.local</span>, password <span class="mono">Assured@2026</span>.
+      Everyone else is created from that login under Setup → Users. Change the password there before go-live.</div>
   </form></div>`;
   document.getElementById("loginform").addEventListener("submit", async e => {
     e.preventDefault();
