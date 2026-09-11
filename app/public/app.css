@@ -165,7 +165,8 @@ main{padding:.75rem;max-width:110rem;margin:0 auto}
 .kpi.click{cursor:pointer} .kpi.click:hover{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand)}
 
 /* ---------------- data table ---------------- */
-.tablewrap{overflow-x:auto}
+.tablewrap{overflow:auto;max-height:calc(100vh - 15rem)}
+/* max-height only caps: a short table is unaffected, and the sticky heading below starts working. */
 table.dt{width:100%;border-collapse:collapse;font-size:.75rem}
 table.dt th{background:var(--surface-2);text-align:left;font-weight:700;color:var(--ink-2);padding:.4375rem .625rem;
   border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0;z-index:2;font-size:.6875rem}
@@ -427,7 +428,10 @@ hr.sep{border:none;border-top:1px solid var(--line);margin:.75rem 0}
 .cal .day:hover .add{opacity:1}
 .cal .day .add:hover{background:var(--brand);color:#fff}
 .cev{border-left:3px solid var(--ink-4);background:var(--surface-2);border-radius:0 3px 3px 0;
-  padding:.1875rem .3125rem;cursor:pointer;overflow:hidden}
+  padding:.1875rem .3125rem;cursor:pointer;overflow:hidden;display:block;text-decoration:none;color:inherit}
+.cev:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+/* the per-day + is always present for keyboard users, and appears on hover or focus for the mouse */
+.cal .day .add:focus-visible{opacity:1;outline:2px solid var(--brand)}
 .cev:hover{background:var(--brand-light)}
 .cev b{font-size:.6875rem;display:block;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cev .m{font-size:.5625rem;color:var(--ink-4);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -448,3 +452,33 @@ table.dt.matrix td.cell.inh{color:var(--ink-4);background:var(--surface-2)}
 /* the lead stage path reuses .path but its steps are buttons */
 .path button.step{cursor:pointer;border:none;font:inherit;font-size:.6875rem;font-weight:600}
 .path button.step:disabled{cursor:default}
+
+/* ---- picker: narrow a long list by group, then by a few letters ---- */
+.pickhead{display:grid;grid-template-columns:minmax(8rem,12rem) 1fr;gap:.375rem;margin-bottom:.25rem}
+select.inp.pickbox{min-height:9.5rem;padding:.25rem;line-height:1.6}
+select.inp.pickbox option{padding:.25rem .375rem;border-radius:3px}
+select.inp.pickbox option:checked{background:var(--brand);color:#fff}
+@media (max-width:640px){.pickhead{grid-template-columns:1fr}}
+
+/* ---- targets: a bar per target row, published against the number set ---- */
+.tgrid{display:grid;gap:.5rem}
+.trow{display:grid;grid-template-columns:1fr 10rem auto;gap:.75rem;align-items:center;
+  padding:.5rem .75rem;border:1px solid var(--line-1);border-radius:var(--r);background:var(--surface-1)}
+.trow .who{min-width:0}
+.trow .who b{display:block;font-size:.8125rem}
+.trow .who .m{font-size:.6875rem;color:var(--ink-4)}
+.tbar{height:.5rem;border-radius:999px;background:var(--surface-3);overflow:hidden}
+.tbar i{display:block;height:100%;border-radius:999px;background:var(--brand)}
+.tbar.met i{background:var(--success)}
+.tnum{font-size:.75rem;white-space:nowrap;font-variant-numeric:tabular-nums}
+@media (max-width:720px){.trow{grid-template-columns:1fr}}
+
+/* ---- access editor: PLM and CRM side by side, grouped ---- */
+.accgrid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.accgrid .mod{border:1px solid var(--line-2);border-radius:var(--r);overflow:hidden}
+.accgrid .mod>h4{margin:0;padding:.375rem .625rem;font-size:.75rem;background:var(--surface-3);
+  border-bottom:1px solid var(--line-1);color:var(--ink-2)}
+.accgrid .mod .grp{font-size:.625rem;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-4);
+  padding:.375rem .625rem .125rem}
+.accgrid .mod .checkline{padding:.0625rem .625rem}
+@media (max-width:720px){.accgrid{grid-template-columns:1fr}}

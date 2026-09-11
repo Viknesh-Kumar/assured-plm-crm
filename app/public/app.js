@@ -14,7 +14,12 @@ export async function api(path, { method = "GET", body } = {}) {
     method, headers: body ? { "Content-Type": "application/json" } : {},
     body: body ? JSON.stringify(body) : undefined
   });
-  if (res.status === 401 && !path.startsWith("/login")) { S.boot = null; renderLogin(); throw new Error("Not signed in."); }
+  if (res.status === 401 && !path.startsWith("/login")) {
+    S.boot = null; closeModal();
+    document.querySelectorAll(".menu").forEach(m => m.remove());
+    renderLogin("Your session has expired. Sign in again.");
+    throw new Error("Not signed in.");
+  }
   const data = res.headers.get("content-type")?.includes("json") ? await res.json() : await res.text();
   if (!res.ok) { const e = new Error(data.error || "Request failed."); e.rule = data.rule; throw e; }
   return data;
@@ -29,8 +34,7 @@ export async function crmRefresh() {
   const [crm, dash] = await Promise.all([api("/crm/bootstrap"), api("/crm/dashboard")]);
   S.crm = crm; S.crmDash = dash;
 }
-export const crmCan = p => !!S.boot?.user?.permissions?.includes(p);
-export const hasCRM = () => ["crm.lead.manage", "crm.content.manage", "crm.setup.manage"].some(crmCan);
+export const hasCRM = () => !!S.boot?.user?.permissions?.some(p => p.startsWith("crm."));
 
 /* ---------------------------- formatting ----------------------------- */
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -119,6 +123,19 @@ export function openForm(cfg) {
     else if (f.type === "checkbox") return `<div class="field ${f.cols === "full" ? "full" : ""}"><label class="checkline">
         <input type="checkbox" id="${id}" name="${f.name}" ${f.checked ? "checked" : ""}><span>${esc(f.label)}</span></label>
         ${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}</div>`;
+    // Pick one row from a long list: narrow by group first, then type a few letters. The group and the
+    // search box are display-only; only the chosen id is submitted.
+    else if (f.type === "picker") return `<div class="field full" data-picker="${f.name}">${lbl}
+        <div class="pickhead">
+          <select class="inp" data-pick="group" aria-label="${esc(f.groupLabel || "Group")}">
+            <option value="">${esc(f.groupBlank || "All")}</option>
+            ${(f.groups || []).map(g => `<option value="${esc(g.value)}" ${String(g.value) === String(f.group ?? "") ? "selected" : ""}>${esc(g.label)}</option>`).join("")}
+          </select>
+          <input class="inp" type="search" data-pick="q" placeholder="${esc(f.searchPlaceholder || "Type to filter…")}" autocomplete="off">
+        </div>
+        <select class="inp pickbox" id="${id}" name="${f.name}" size="6" data-pick="list" ${f.required ? "required" : ""}></select>
+        <div class="help" data-pick="count"></div>
+        ${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}</div>`;
     else input = `<input class="inp" id="${id}" name="${f.name}" type="${f.type || "text"}"
         value="${esc(f.value ?? "")}" ${f.required ? "required" : ""} ${f.min !== undefined ? `min="${f.min}"` : ""}
         ${f.max !== undefined ? `max="${f.max}"` : ""} ${f.step ? `step="${f.step}"` : ""}
@@ -141,12 +158,54 @@ export function openForm(cfg) {
       </footer>
     </form>`;
   document.getElementById("modal-root").appendChild(dlg);
-  dlg.querySelectorAll("[data-close]").forEach(b => b.onclick = () => dlg.remove());
-  dlg.addEventListener("cancel", () => dlg.remove());
+  // Closing a form the user has typed into throws their work away, so ask first.
+  let dirty = false;
+  dlg.addEventListener("input", () => { dirty = true; }, { once: true });
+  const close = ev => {
+    if (dirty && !confirm("Discard what you have typed?")) { ev?.preventDefault(); return; }
+    dlg.remove();
+  };
+  dlg.querySelectorAll("[data-close]").forEach(b => b.onclick = () => close());
+  dlg.addEventListener("cancel", close);
+
+  for (const f of (cfg.fields || []).filter(x => x.type === "picker")) {
+    const wrap = dlg.querySelector(`[data-picker="${f.name}"]`);
+    const group = wrap.querySelector('[data-pick="group"]');
+    const q = wrap.querySelector('[data-pick="q"]');
+    const list = wrap.querySelector('[data-pick="list"]');
+    const count = wrap.querySelector('[data-pick="count"]');
+    // The chosen row is held here, not read back off the list, so it survives a filter that hides it.
+    let chosen = String(f.value ?? "");
+    const draw = () => {
+      const g = group.value, needle = q.value.trim().toLowerCase();
+      const hits = (f.items || []).filter(it =>
+        (!g || String(it.group) === g) && (!needle || String(it.label).toLowerCase().includes(needle)));
+      const picked = (f.items || []).find(it => String(it.value) === chosen);
+      // Whatever is chosen stays in the list even when the current filter would hide it.
+      const rows = picked && !hits.some(it => String(it.value) === chosen) ? [picked, ...hits] : hits;
+      list.innerHTML = `<option value="">${esc(f.blank || "— none —")}</option>` +
+        rows.map(it => `<option value="${esc(it.value)}" ${String(it.value) === chosen ? "selected" : ""}
+          title="${esc(it.hint || "")}">${esc(it.label)}</option>`).join("");
+      count.textContent = (f.items || []).length
+        ? `${hits.length} of ${f.items.length} to choose from${g ? "" : " — pick a channel above to narrow the list"}`
+          + (picked ? ` · chosen: ${picked.label}` : "")
+        : (f.emptyHint || "Nothing to choose from yet.");
+    };
+    list.addEventListener("change", () => { chosen = list.value; draw(); });
+    group.addEventListener("change", draw);
+    q.addEventListener("input", draw);
+    draw();
+  }
+
   dlg.querySelector("form").addEventListener("submit", async ev => {
     ev.preventDefault();
     const fd = new FormData(ev.target);
     const data = Object.fromEntries(fd.entries());
+    // A checkbox name used more than once in the form is a set, not a single value. This covers groups
+    // rendered inside an html field, which the declared-field loop below never sees.
+    const counts = {};
+    ev.target.querySelectorAll('input[type="checkbox"][name]').forEach(i => { counts[i.name] = (counts[i.name] || 0) + 1; });
+    for (const [name, n] of Object.entries(counts)) if (n > 1) data[name] = fd.getAll(name);
     for (const f of cfg.fields || []) {
       if (f.type === "checkbox") data[f.name] = fd.has(f.name);
       if (f.type === "checkboxes") data[f.name] = fd.getAll(f.name).map(v => f.numeric ? Number(v) : v);
@@ -194,6 +253,8 @@ export function openMenu(anchor, items) {
     : i.header ? `<div class="hd">${esc(i.header)}</div>`
       : `<button ${i.disabled ? "disabled" : ""} data-i="${items.indexOf(i)}">${esc(i.label)}</button>`).join("");
   document.body.appendChild(m);
+  const restore = () => { try { anchor.focus(); } catch { /* anchor may be gone after a re-render */ } };
+  m.addEventListener("keydown", e => { if (e.key === "Escape") { m.remove(); restore(); } });
   const r = anchor.getBoundingClientRect();
   m.style.top = `${r.bottom + window.scrollY + 2}px`;
   m.style.left = `${Math.max(8, Math.min(r.left + window.scrollX, window.innerWidth - m.offsetWidth - 12))}px`;
@@ -201,17 +262,21 @@ export function openMenu(anchor, items) {
     const b = e.target.closest("button[data-i]"); if (!b) return;
     m.remove(); items[+b.dataset.i].onClick?.();
   });
-  setTimeout(() => document.addEventListener("click", function off(e) {
-    if (!m.contains(e.target)) { m.remove(); document.removeEventListener("click", off); }
-  }), 0);
+  setTimeout(() => {
+    m.querySelector("button:not([disabled])")?.focus();
+    document.addEventListener("click", function off(e) {
+      if (!m.contains(e.target)) { m.remove(); document.removeEventListener("click", off); }
+    });
+  }, 0);
 }
 
 /* ------------------------------ tables ------------------------------- */
-export function dataTable({ columns, rows, onRow, empty, rowClass, sortKey }) {
+export function dataTable({ columns, rows, onRow, empty, rowClass, sortKey, sortDir = 1 }) {
   if (!rows.length) return `<div class="empty">${esc(empty || "Nothing to show.")}</div>`;
   return `<div class="tablewrap"><table class="dt">
-    <thead><tr>${columns.map(c => `<th class="${c.align || ""} ${c.sort ? "sortable" : ""}" ${c.sort ? `data-sort="${c.sort}"` : ""}>
-      ${esc(c.label)}${sortKey === c.sort ? ' <span class="arr">▼</span>' : ""}</th>`).join("")}</tr></thead>
+    <thead><tr>${columns.map(c => `<th class="${c.align || ""} ${c.sort ? "sortable" : ""}" ${c.sort ? `data-sort="${c.sort}"` : ""}
+      ${sortKey === c.sort ? `aria-sort="${sortDir < 0 ? "descending" : "ascending"}"` : ""}>
+      ${esc(c.label)}${sortKey === c.sort ? ` <span class="arr">${sortDir < 0 ? "▲" : "▼"}</span>` : ""}</th>`).join("")}</tr></thead>
     <tbody>${rows.map(r => `<tr class="${onRow ? "click" : ""} ${rowClass ? rowClass(r) : ""}" ${onRow ? `data-row="${onRow(r)}"` : ""}>
       ${columns.map(c => `<td class="${c.align || ""}">${c.cell(r)}</td>`).join("")}</tr>`).join("")}</tbody>
   </table></div>`;
@@ -288,30 +353,55 @@ let mountFn = null;
 export async function render() {
   if (!S.boot) return renderLogin();
   const raw = location.hash.replace(/^#/, "") || "/home";
-  S.app = raw.startsWith("/crm") ? "crm" : "plm";
+  // A view may carry a query ("#/products?mine"); it reads that itself. Routing is on the path alone.
+  const path = raw.split("?")[0];
+  S.app = path.startsWith("/crm") ? "crm" : "plm";
   const app = document.getElementById("app");
-  if (S.app === "crm") {
-    if (!hasCRM()) {
-      app.className = "";
-      app.innerHTML = chrome("/home") + `<main><div class="card"><div class="empty">
-        The CRM is restricted. Your roles do not carry any <span class="mono">crm.*</span> permission —
-        ask an administrator to assign you <b>CRM Sales User</b> or <b>CRM Administrator</b> in Setup → Users.</div></div></main>`;
-      wireChrome(); return;
-    }
-    if (!S.crm) await crmRefresh();
+  if (S.app === "crm" && !hasCRM()) {
+    S.app = "plm";                                    // show the PLM nav, not a CRM nav that loops back here
+    app.className = "";
+    app.innerHTML = chrome("/home") + `<main><div class="card"><div class="empty">
+      The CRM is restricted. Your roles do not carry any <span class="mono">crm.*</span> permission —
+      ask an administrator to assign you <b>CRM Sales User</b> or <b>CRM Administrator</b> in Setup → Users.
+      <div style="margin-top:.75rem">${link("/home", "Go to Product Lifecycle", "btn brand")}</div></div></div></main>`;
+    wireChrome(); return;
   }
+  if (S.app === "crm" && !S.crm) await crmRefresh();
+
   let view = null;
-  for (const [rx, fn] of ROUTES) {
-    const m = raw.match(rx);
-    if (m) { view = await fn(...m.slice(1)); break; }
+  try {
+    for (const [rx, fn] of ROUTES) {
+      const m = path.match(rx);
+      if (m) { view = await fn(...m.slice(1)); break; }
+    }
+    if (!view) view = { html: `<main><div class="card"><div class="empty">Page not found. ${link("/home", "Back to Home")}</div></div></main>` };
+  } catch (e) {
+    // A view that throws used to leave the previous screen on a new URL, saying nothing.
+    errToast(e);
+    view = { html: `<main><div class="card"><div class="empty"><b>This page could not be loaded.</b>
+      <div style="margin:.5rem 0">${esc(e.message)}</div>
+      <button class="btn" data-a="reload">Try again</button> ${link("/home", "Back to Home", "btn")}</div></div></main>` };
   }
-  if (!view) view = { html: `<main><div class="card"><div class="empty">Page not found. ${link("/home", "Back to Home")}</div></div></main>` };
   app.className = "";
-  app.innerHTML = chrome(raw) + view.html;
+  app.innerHTML = chrome(path) + view.html;
   wireChrome();
+  document.querySelector('[data-a="reload"]')?.addEventListener("click", () => render());
   mountFn = view.mount || null;
-  mountFn?.();
-  window.scrollTo(0, 0);
+  try { mountFn?.(); } catch (e) { errToast(e); }
+  if (!keepScroll) window.scrollTo(0, 0);
+  keepScroll = false;
+}
+
+/** Set by callers that re-render in place after a mutation, so the reader keeps their position. */
+let keepScroll = false;
+export const renderInPlace = async () => { keepScroll = true; await render(); };
+
+/** Re-read the bootstrap after an administration change, then repaint. */
+export async function reboot(msg) {
+  S.boot = await api("/bootstrap");
+  if (S.crm) await crmRefresh();
+  if (msg) toast("ok", msg);
+  await render();
 }
 
 export async function refresh(silent) {
@@ -414,9 +504,9 @@ function wireChrome() {
     const b = e.target.closest("button[data-href]"); if (!b) return;
     results.hidden = true; search.value = ""; go(b.dataset.href);
   });
-  document.addEventListener("click", e => {
-    if (!results?.contains(e.target) && e.target !== search) results && (results.hidden = true);
-  }, { once: true });
+  // blur closes it; the 150ms lets the results click handler above run first
+  search?.addEventListener("blur", () => setTimeout(() => { if (results) results.hidden = true; }, 150));
+  search?.addEventListener("keydown", e => { if (e.key === "Escape" && results) { results.hidden = true; search.blur(); } });
 
   document.querySelector('[data-act="profile"]')?.addEventListener("click", e => {
     const u = me();
@@ -514,7 +604,12 @@ export async function boot() {
   await render();
 }
 
-window.addEventListener("hashchange", () => render());
+window.addEventListener("hashchange", async () => {
+  // Views read cached state, so refresh before painting: navigating is the natural moment to catch up
+  // with what other people have changed. Silent, and a failure must never block the navigation.
+  try { await (S.app === "crm" ? crmRefresh() : refresh(true)); } catch { /* offline or signed out */ }
+  render();
+});
 document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".menu").forEach(m => m.remove()); });
 
 (async function start() {

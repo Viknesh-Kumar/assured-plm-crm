@@ -3,31 +3,39 @@
 import { db, all, one, run, col, setSetting, getSetting } from "./db.mjs";
 import { hashPassword, iso, addWorkingDays } from "./lib.mjs";
 
+/**
+ * Every grantable permission, as [key, label, module, group]. The module and group exist only so the
+ * access editor can present two clearly separate columns — Product Lifecycle and CRM — which is what
+ * makes "only a few may move a lead between stages" a thing an administrator can actually see and set.
+ */
+const PLM = "Product Lifecycle", CRM = "CRM & Content";
 export const PERMISSIONS = [
-  ["product.create",    "Create product records"],
-  ["product.edit",      "Edit product records"],
-  ["criteria.mark",     "Mark gate exit criteria met"],
-  ["gate.submit",       "Submit a gate for approval"],
-  ["effort.log",        "Log consultant effort"],
-  ["deployment.record", "Record a client deployment"],
-  ["revenue.confirm",   "Confirm attributed revenue"],
-  ["product.park",      "Park a product (On Hold)"],
-  ["kill.recommend",    "Recommend a kill"],
-  ["kill.approve",      "Approve a kill or withdrawal"],
-  ["market.change",     "Change a market state"],
-  ["entry.override",    "Override the derived entry gate"],
-  ["owner.change",      "Change the product owner"],
-  ["stagemodel.manage", "Maintain the stage model and exit criteria"],
-  ["users.manage",      "Maintain users and role assignments"],
-  ["settings.manage",   "Maintain system settings and reference data"],
-  ["crm.lead.manage",   "CRM — create and work leads"],
-  ["crm.content.manage","CRM — plan and publish content"],
-  ["crm.setup.manage",  "CRM — configure pipelines, stages, requirements and reference data"]
+  ["product.create",    "Create product records",                         PLM, "Records"],
+  ["product.edit",      "Edit product records",                           PLM, "Records"],
+  ["owner.change",      "Change the product owner",                       PLM, "Records"],
+  ["entry.override",    "Override the derived entry gate",                PLM, "Records"],
+  ["criteria.mark",     "Mark gate exit criteria met",                    PLM, "Gates and approvals"],
+  ["gate.submit",       "Submit a gate for approval",                     PLM, "Gates and approvals"],
+  ["product.park",      "Park a product (On Hold) and resume it",         PLM, "Gates and approvals"],
+  ["kill.recommend",    "Recommend a kill",                               PLM, "Gates and approvals"],
+  ["kill.approve",      "Approve a kill or withdrawal",                   PLM, "Gates and approvals"],
+  ["market.change",     "Change a market state",                          PLM, "Market and money"],
+  ["effort.log",        "Log consultant effort",                          PLM, "Market and money"],
+  ["deployment.record", "Record a client deployment",                     PLM, "Market and money"],
+  ["revenue.confirm",   "Confirm attributed revenue",                     PLM, "Market and money"],
+  ["stagemodel.manage", "Maintain the stage model and exit criteria",     PLM, "Administration"],
+  ["users.manage",      "Maintain users, roles and access",               PLM, "Administration"],
+  ["settings.manage",   "Maintain system settings and reference data",    PLM, "Administration"],
+  ["crm.lead.create",   "Add a new lead",                                 CRM, "Leads"],
+  ["crm.lead.manage",   "Edit leads, attach content, mark lost or reopen", CRM, "Leads"],
+  ["crm.lead.move",     "Move a lead between pipeline stages",            CRM, "Leads"],
+  ["crm.content.manage","Plan and publish content, and set targets",      CRM, "Content calendar"],
+  ["crm.setup.manage",  "Configure pipelines, stages and requirements",   CRM, "Administration"]
 ];
 
 const ROLES = [
   ["Product Head", "Administers the system: users, roles, the stage model, exit criteria and reference data. Approves no gate by default.",
-    "product.create,product.edit,users.manage,stagemodel.manage,settings.manage,crm.setup.manage,crm.lead.manage,crm.content.manage"],
+    "product.create,product.edit,users.manage,stagemodel.manage,settings.manage,crm.setup.manage,crm.lead.create,crm.lead.manage,crm.lead.move,crm.content.manage"],
   ["CEO", "Chief Executive Officer. Approves gates 3 and 8, all kills and all withdrawals. Chairs the quarterly portfolio review.",
     "product.edit,kill.approve,effort.log,stagemodel.manage"],
   ["Business Head", "Process owner. Approves gates 1, 2 and 7. Owns all six market states.",

@@ -1,6 +1,6 @@
 // CRM & Content Calendar engine — AGC-BRD-CRM-001 §6. Every rule is enforced here (§3.9).
 // The browser may display a refusal; it never decides one.
-import { db, all, one, run, col, getSetting, setSetting, audit, notify } from "./db.mjs";
+import { db, all, one, run, col, getSetting, setSetting, audit, notify, tx } from "./db.mjs";
 import { HttpError } from "./api.mjs";
 import { copyTemplateStages, seedDefaultRequirements, GATE_REQUIREMENTS, CRM_PERMISSIONS } from "./crm-seed.mjs";
 import { today, toCSV } from "./lib.mjs";
@@ -15,7 +15,10 @@ const deny = (msg, rule) => { throw new HttpError(403, msg, rule); };
 const gone = msg => { throw new HttpError(404, msg); };
 
 const can = (u, p) => u.permissions.includes(p);
-const need = (u, p) => { if (!can(u, p)) deny(`Your roles (${u.roleNames.join(", ") || "none"}) do not carry "${p}".`, "FR-43"); };
+const PERM_LABEL = Object.fromEntries(CRM_PERMISSIONS);
+const need = (u, p) => { if (!can(u, p)) deny(
+  `You do not have access to: ${PERM_LABEL[p] || p} (${p}). Your roles are ${u.roleNames.join(", ") || "none"}. `
+  + `An administrator can grant it in Setup → Users, either through a role or directly to you.`, "FR-43"); };
 export const hasCRM = u => CRM_PERMISSIONS.some(([p]) => u.permissions.includes(p));
 
 const setting = (k, d) => { const v = getSetting(k); return v === null ? d : v; };
@@ -45,12 +48,14 @@ export function crmBootstrap(user) {
       ...t, stages: all("SELECT * FROM stage_template_stage WHERE template_id=? ORDER BY seq", t.id)
     })),
     pipelines: listPipelines(),
-    people: all(`SELECT u.id, u.name, u.title FROM users u WHERE u.active=1 ORDER BY u.name`),
+    people: all(`SELECT u.id, u.name, u.title, u.active FROM users u ORDER BY u.active DESC, u.name`),
     bands: BANDS,
     movement: { allowSkip: flag("crm_allow_skip", "0"), allowBack: flag("crm_allow_back", "1"),
       backReason: flag("crm_back_reason", "1"), reasonMin: reasonMin() },
     canSetup: can(user, "crm.setup.manage"),
     canLead: can(user, "crm.lead.manage"),
+    canCreateLead: can(user, "crm.lead.create"),
+    canMoveLead: can(user, "crm.lead.move"),
     canContent: can(user, "crm.content.manage")
   };
 }
@@ -108,10 +113,12 @@ export function effectiveSource(lead) {
 }
 
 const CORE_KEYS = new Set(["company", "customer", "designation", "location", "contact", "email",
-  "activity", "industry", "segment", "offering", "channel", "source", "content", "owner"]);
+  "activity", "industry", "segment", "offering", "channel", "source", "content", "owner",
+  "value", "invoice_no"]);
 
 export function valueOf(lead, key) {
   switch (key) {
+    case "value": return lead.est_annual_value;
     case "industry": return lead.industry_id;
     case "segment": return lead.segment_id;
     case "offering": return lead.offering_id;
@@ -157,7 +164,7 @@ SELECT l.*, o.name AS offering_name, i.name AS industry_name, cs.name AS segment
   ch.name AS channel_name, ch.mode AS channel_mode, u.name AS owner_name, cb.name AS created_by_name,
   p.name AS pipeline_name, p.template_id, t.name AS template_name, t.source_ref,
   s.seq AS stage_seq, s.name AS stage_name, s.band AS stage_band, s.is_gate AS stage_is_gate,
-  c.title AS primary_content_title,
+  c.title AS primary_content_title, c.channel_id AS activity_channel_id, ccc.name AS activity_channel_name,
   (SELECT COUNT(*) FROM pipeline_stage x WHERE x.pipeline_id=l.pipeline_id) AS stage_total,
   (SELECT name FROM pipeline_stage x WHERE x.pipeline_id=l.pipeline_id AND x.is_gate=1 LIMIT 1) AS gate_name,
   (SELECT COUNT(*) FROM lead_content_touch tt WHERE tt.lead_id=l.id) AS touch_count
@@ -171,7 +178,8 @@ LEFT JOIN users cb ON cb.id=l.created_by
 LEFT JOIN pipeline p ON p.id=l.pipeline_id
 LEFT JOIN stage_template t ON t.id=p.template_id
 LEFT JOIN pipeline_stage s ON s.id=l.stage_id
-LEFT JOIN content c ON c.id=l.primary_content_id`;
+LEFT JOIN content c ON c.id=l.primary_content_id
+LEFT JOIN content_channel ccc ON ccc.id=c.channel_id`;
 
 function decorateLead(l) {
   if (!l) return l;
@@ -196,21 +204,24 @@ const mustLead = id => getLead(id) || gone("Lead not found.");
 
 /** BR-01, BR-02, BR-03 */
 export function createLead(user, b) {
-  need(user, "crm.lead.manage");
+  need(user, "crm.lead.create");
   const company = String(b.company ?? "").trim();
   if (!company) refuse("BR-02", "A lead needs a company name. It is the only thing required to log one.");
+  // Anything beyond the company name is an edit; check for it before the insert so a refusal never
+  // leaves a half-populated lead behind.
+  const extra = { ...b }; delete extra.company;
+  if (Object.keys(extra).length) need(user, "crm.lead.manage");
   run(`INSERT INTO lead(company,created_at,created_by,updated_at) VALUES(?,datetime('now'),?,datetime('now'))`,
     company, user.id);
   const id = col("SELECT MAX(id) FROM lead");
   audit("lead", id, "create", `Lead "${company}" logged`, user.id);
-  const rest = { ...b }; delete rest.company;
-  if (Object.keys(rest).length) updateLead(user, id, rest);
+  if (Object.keys(extra).length) updateLead(user, id, extra);
   return getLead(id);
 }
 
 const SETTABLE = {
   company: "company", customer: "customer", designation: "designation", location: "location",
-  contact: "contact", email: "email", activity: "activity",
+  contact: "contact", email: "email", invoice_no: "invoice_no", value: "est_annual_value",
   offering: "offering_id", industry: "industry_id", segment: "segment_id",
   channel: "channel_id", owner: "owner_id"
 };
@@ -219,6 +230,10 @@ const SETTABLE = {
 export function updateLead(user, id, b) {
   need(user, "crm.lead.manage");
   const before = mustLead(id);
+  return tx(() => writeLead(user, id, b, before));
+}
+
+function writeLead(user, id, b, before) {
   if (before.lost && b.__moving) refuse("BR-29", "A lost lead cannot be moved. Reopen it first.");
 
   if ("company" in b && !String(b.company ?? "").trim())
@@ -241,12 +256,21 @@ export function updateLead(user, id, b) {
         if (!row.active && before[colName] !== v)
           refuse("BR-36", `"${row.name}" is deactivated and can no longer be selected. Existing records keep it.`);
       }
+    } else if (colName === "est_annual_value" && v !== null) {
+      v = Number(String(v).replace(/[,\s]/g, ""));
+      if (!Number.isFinite(v)) refuse("FR-38", `${f?.label || key} must be a number.`);
+      if (v < 0) refuse("FR-38", `${f?.label || key} cannot be negative.`);
     } else if (v !== null) v = String(v).trim() || null;
     if (String(before[colName] ?? "") === String(v ?? "")) continue;
     run(`UPDATE lead SET ${colName}=? WHERE id=?`, v, id);
     changed.push(key);
     audit("lead", id, "update", `${before.company}: ${f?.label || key} changed`, user.id, key, before[colName], v);
   }
+
+  // Activity Name is the content picker. Choosing an item snapshots its title onto the lead and makes
+  // it the primary attribution — there is no separate Attributed Content field any more (BR-33).
+  if ("activity" in b && fieldByKey("activity")?.active && setActivity(user, id, before, b.activity))
+    changed.push("activity");
 
   // custom fields (§5.3)
   for (const f of all("SELECT * FROM lead_field WHERE custom=1 AND active=1")) {
@@ -261,6 +285,38 @@ export function updateLead(user, id, b) {
   if (changed.includes("offering") || changed.includes("industry")) rederivePipeline(user, id);  // BR-07
   run("UPDATE lead SET updated_at=datetime('now') WHERE id=?", id);
   return { lead: getLead(id), changed };
+}
+
+/**
+ * Activity Name ← a content item. One write sets three things that used to be set separately: the
+ * activity text on the lead, the primary attribution, and the touch row. Returns true if anything moved.
+ */
+function setActivity(user, leadId, before, raw) {
+  const empty = raw === "" || raw === null || raw === undefined;
+  const cid = empty ? null : Number(raw);
+  if (!empty && !Number.isFinite(cid))
+    refuse("BR-33", "Activity Name is chosen from the Content Calendar. Plan the content first, then pick it here.");
+
+  if (cid === null) {
+    if (!before.activity && !before.primary_content_id) return false;
+    run("UPDATE lead SET activity=NULL, primary_content_id=NULL WHERE id=?", leadId);
+    run("UPDATE lead_content_touch SET is_primary=0 WHERE lead_id=?", leadId);
+    audit("lead", leadId, "activity", `${before.company}: Activity Name cleared`, user.id,
+      "activity", before.activity, null);
+    return true;
+  }
+
+  const c = getContent(cid);
+  if (!c) refuse("BR-33", "That content item no longer exists. Pick another from the Content Calendar.");
+  if (before.primary_content_id === cid && before.activity === c.title) return false;
+  run("UPDATE lead SET activity=?, primary_content_id=? WHERE id=?", c.title, cid, leadId);
+  run(`INSERT INTO lead_content_touch(lead_id,content_id,is_primary,added_at,added_by)
+       VALUES(?,?,1,datetime('now'),?) ON CONFLICT(lead_id,content_id) DO UPDATE SET is_primary=1`,
+    leadId, cid, user.id);
+  run("UPDATE lead_content_touch SET is_primary=0 WHERE lead_id=? AND content_id<>?", leadId, cid);
+  audit("lead", leadId, "activity", `${before.company}: Activity Name set to "${c.title}"`, user.id,
+    "activity", before.activity, c.title);
+  return true;
 }
 
 function rederiveSource(user, id) {
@@ -329,7 +385,7 @@ function writeHistory(leadId, fromSeq, toSeq, snapshot, actorId, reason) {
 
 /** The move engine — BR-16, BR-21, BR-22, BR-23, BR-29. */
 export function attemptMove(user, id, b) {
-  need(user, "crm.lead.manage");
+  need(user, "crm.lead.move");
   const l = mustLead(id);
   const toSeq = Number(b.to_seq);
   if (!l.pipeline_id) refuse("BR-06", "This lead has no pipeline. Set both Offering and Industry and the stages appear.");
@@ -445,8 +501,28 @@ export const contentForMonth = (y, m) => all(
   m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`);
 
 const STATUSES = ["Planned", "Drafted", "Scheduled", "Published"];
+/** How engagement on a post is counted. One number, and the unit it is counted in. */
+export const METRICS = ["Views", "Likes", "Impressions"];
 
-/** BR-31, BR-32 */
+/** A number and its unit; neither half says anything on its own. Returns [metric, value]. */
+function readEngagement(b) {
+  const metric = String(b.engagement_metric ?? "").trim();
+  const raw = b.engagement_value;
+  const hasValue = !(raw === "" || raw === null || raw === undefined);
+  if (metric && !METRICS.includes(metric))
+    refuse("BR-38", `Engagement is counted in ${METRICS.join(", ")} — "${metric}" is not one of them.`);
+  if (hasValue && !metric)
+    refuse("BR-38", "An engagement number needs a unit beside it. Choose Views, Likes or Impressions.");
+  if (metric && !hasValue)
+    refuse("BR-38", `"${metric}" needs a number beside it, or clear the unit.`);
+  if (!hasValue) return [null, null];
+  const value = Number(String(raw).replace(/[,\s]/g, ""));
+  if (!Number.isFinite(value) || value < 0 || Math.floor(value) !== value)
+    refuse("BR-38", "Engagement is a whole number of zero or more.");
+  return [metric, value];
+}
+
+/** BR-31, BR-32, BR-38 */
 export function saveContent(user, id, b) {
   need(user, "crm.content.manage");
   const missing = [];
@@ -460,24 +536,105 @@ export function saveContent(user, id, b) {
   const status = STATUSES.includes(b.status) ? b.status : "Planned";
   if (status === "Published" && String(b.date) > today())
     refuse("BR-32", `"${b.title}" is dated ${b.date}, which is in the future. It cannot be marked Published yet.`);
+  const [metric, value] = readEngagement(b);
 
   if (id) {
     const ex = getContent(id) || gone("Content not found.");
     run(`UPDATE content SET date=?,title=?,type_id=?,channel_id=?,person_id=?,offering_id=?,industry_id=?,
-           theme=?,status=?,url=? WHERE id=?`,
+           theme=?,status=?,url=?,engagement_metric=?,engagement_value=? WHERE id=?`,
       b.date, String(b.title).trim(), b.type_id, b.channel_id, b.person_id,
-      b.offering_id || null, b.industry_id || null, b.theme || null, status, b.url || null, id);
+      b.offering_id || null, b.industry_id || null, b.theme || null, status, b.url || null, metric, value, id);
     audit("content", id, "update", `Content "${b.title}" updated`, user.id, "status", ex.status, status);
+    // The title is snapshotted onto every lead that picked it as its Activity Name; keep them in step.
+    run("UPDATE lead SET activity=? WHERE primary_content_id=?", String(b.title).trim(), id);
   } else {
     run(`INSERT INTO content(date,title,type_id,channel_id,person_id,offering_id,industry_id,theme,status,url,
-           created_at,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,datetime('now'),?)`,
+           engagement_metric,engagement_value,created_at,created_by)
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?)`,
       b.date, String(b.title).trim(), b.type_id, b.channel_id, b.person_id,
-      b.offering_id || null, b.industry_id || null, b.theme || null, status, b.url || null, user.id);
+      b.offering_id || null, b.industry_id || null, b.theme || null, status, b.url || null, metric, value, user.id);
     id = col("SELECT MAX(id) FROM content");
     audit("content", id, "create", `Content "${b.title}" planned for ${b.date}`, user.id);
     if (b.prompt_id) resolvePrompt(user, Number(b.prompt_id), id);
   }
   return getContent(id);
+}
+
+/* ------------------------------------------------------------------ */
+/* publishing targets                                                  */
+/* ------------------------------------------------------------------ */
+const PERIOD_RX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * Targets for one month, each carrying what has actually been published against it. Achievement is
+ * counted from the content itself and never stored, so it can never drift from the calendar.
+ */
+export function listTargets(period) {
+  const rows = all(`SELECT t.*, cc.name AS channel_name, cc.colour, ct.name AS type_name, u.name AS person_name
+                    FROM content_target t
+                    LEFT JOIN content_channel cc ON cc.id=t.channel_id
+                    LEFT JOIN content_type ct ON ct.id=t.type_id
+                    LEFT JOIN users u ON u.id=t.person_id
+                    ${period ? "WHERE t.period=?" : ""}
+                    ORDER BY t.period DESC, cc.sort, ct.sort, u.name`, ...(period ? [period] : []));
+  return rows.map(t => {
+    const where = "date >= ? AND date < ? AND channel_id=? AND type_id=? AND person_id=?";
+    const [from, to] = monthBounds(t.period);
+    const args = [from, to, t.channel_id, t.type_id, t.person_id];
+    const published = col(`SELECT COUNT(*) FROM content WHERE ${where} AND status='Published'`, ...args);
+    const planned = col(`SELECT COUNT(*) FROM content WHERE ${where}`, ...args);
+    return { ...t, published, planned,
+      gap: t.target - published,
+      pct: t.target ? Math.round(published / t.target * 100) : 0 };
+  });
+}
+
+function monthBounds(period) {
+  const y = Number(period.slice(0, 4)), m = Number(period.slice(5, 7));
+  const pad = n => String(n).padStart(2, "0");
+  return [`${y}-${pad(m)}-01`, m === 12 ? `${y + 1}-01-01` : `${y}-${pad(m + 1)}-01`];
+}
+
+/** BR-39 — a target is a (month, channel, content type, person) quadruple, and it is unique. */
+export function saveTarget(user, id, b) {
+  need(user, "crm.content.manage");
+  const period = String(b.period ?? "").trim();
+  if (!PERIOD_RX.test(period)) refuse("BR-39", "A target is set for one month, written as YYYY-MM.");
+  const need4 = [["channel_id", "Channel"], ["type_id", "Content type"], ["person_id", "Person"]]
+    .filter(([k]) => !b[k]).map(([, l]) => l);
+  if (need4.length)
+    refuse("BR-39", `A target needs ${need4.join(", ")}. A target is how many items one person publishes `
+      + "of one content type on one channel in one month.");
+  const target = Number(b.target);
+  if (!Number.isFinite(target) || target < 1 || Math.floor(target) !== target)
+    refuse("BR-39", "A target is a whole number of one or more.");
+
+  const clash = one(`SELECT id FROM content_target WHERE period=? AND channel_id=? AND type_id=? AND person_id=? AND id<>?`,
+    period, b.channel_id, b.type_id, b.person_id, id || 0);
+  if (clash) refuse("BR-39", "A target is already set for that person, channel and content type in that month. "
+    + "Edit it rather than adding a second.");
+
+  if (id) {
+    one("SELECT id FROM content_target WHERE id=?", id) || gone("Target not found.");
+    run(`UPDATE content_target SET period=?,channel_id=?,type_id=?,person_id=?,target=?,note=? WHERE id=?`,
+      period, b.channel_id, b.type_id, b.person_id, target, b.note || null, id);
+    audit("content_target", id, "update", `Publishing target updated for ${period}`, user.id);
+  } else {
+    run(`INSERT INTO content_target(period,channel_id,type_id,person_id,target,note,created_at,created_by)
+         VALUES(?,?,?,?,?,?,datetime('now'),?)`,
+      period, b.channel_id, b.type_id, b.person_id, target, b.note || null, user.id);
+    id = col("SELECT MAX(id) FROM content_target");
+    audit("content_target", id, "create", `Publishing target of ${target} set for ${period}`, user.id);
+  }
+  return listTargets(period);
+}
+
+export function deleteTarget(user, id) {
+  need(user, "crm.content.manage");
+  const t = one("SELECT * FROM content_target WHERE id=?", id) || gone("Target not found.");
+  run("DELETE FROM content_target WHERE id=?", id);
+  audit("content_target", id, "delete", `Publishing target for ${t.period} removed`, user.id);
+  return listTargets(t.period);
 }
 
 /** BR-34 */
@@ -502,7 +659,8 @@ export function attachContent(user, leadId, b) {
   if (b.primary) {
     run("UPDATE lead_content_touch SET is_primary=0 WHERE lead_id=?", leadId);
     run("UPDATE lead_content_touch SET is_primary=1 WHERE lead_id=? AND content_id=?", leadId, c.id);
-    run("UPDATE lead SET primary_content_id=? WHERE id=?", c.id, leadId);
+    // The primary attribution and Activity Name are the same fact, so they move together.
+    run("UPDATE lead SET primary_content_id=?, activity=? WHERE id=?", c.id, c.title, leadId);
   }
   audit("lead", leadId, "content", `${l.company}: "${c.title}" attached${b.primary ? " as primary" : ""}`, user.id);
   return leadDetail(user, leadId);
@@ -512,7 +670,8 @@ export function detachContent(user, leadId, contentId) {
   need(user, "crm.lead.manage");
   const l = mustLead(leadId);
   run("DELETE FROM lead_content_touch WHERE lead_id=? AND content_id=?", leadId, contentId);
-  if (l.primary_content_id === contentId) run("UPDATE lead SET primary_content_id=NULL WHERE id=?", leadId);
+  if (l.primary_content_id === contentId)
+    run("UPDATE lead SET primary_content_id=NULL, activity=NULL WHERE id=?", leadId);
   audit("lead", leadId, "content", `${l.company}: content detached`, user.id);
   return leadDetail(user, leadId);
 }
@@ -596,6 +755,9 @@ export function crmDashboard(user) {
   });
   const blocked = open.filter(l => Array.isArray(l.missing) && l.missing.length);
   const prompts = listPrompts("Open");
+  const period = today().slice(0, 7);
+  const targets = listTargets(period);
+  const sum = (rows, k) => rows.reduce((n, r) => n + (Number(r[k]) || 0), 0);
   return {
     kpi: {
       open: open.length, total: leads.length, lost: lost.length,
@@ -605,8 +767,13 @@ export function crmDashboard(user) {
       blocked: blocked.length,
       unassigned: leads.filter(l => !l.pipeline_id).length,
       content: col("SELECT COUNT(*) FROM content"),
-      prompts: prompts.length
+      prompts: prompts.length,
+      pipeline_value: sum(open, "est_annual_value"),
+      won_value: sum(open.filter(l => l.stage_band === "Closed"), "est_annual_value"),
+      target_total: sum(targets, "target"),
+      target_published: sum(targets, "published")
     },
+    period, targets,
     bands: bandCounts, lostCount: lost.length,
     channels: Object.values(byChannel).sort((a, b) => b.n - a.n),
     blocked: blocked.slice(0, 20),
@@ -753,6 +920,43 @@ export const CRM_REPORTS = {
         LEFT JOIN users u ON u.id=h.actor_id ORDER BY h.id DESC`);
       return { columns: cols(rows, ["When", "Company", "From stage", "To stage",
         "Stage name at the time", "By", "Reason"]), rows };
+    }
+  },
+  "CRM-09": {
+    title: "Targets against published",
+    note: "Every publishing target and what was actually published against it. A target is one person, one channel, one content type, one month (BR-39). Achievement is counted from the calendar, so it cannot drift.",
+    build: () => {
+      const rows = listTargets(null).map(t => ({
+        Month: t.period, Person: t.person_name || "—", Channel: t.channel_name || "—",
+        "Content type": t.type_name || "—", Target: t.target, Planned: t.planned, Published: t.published,
+        "Against target": `${t.pct}%`,
+        Standing: t.gap <= 0 ? "Met" : t.planned >= t.target ? `${t.gap} still to publish` : `${t.target - t.planned} not yet planned`
+      }));
+      return { columns: cols(rows, ["Month", "Person", "Channel", "Content type", "Target", "Planned",
+        "Published", "Against target", "Standing"]), rows };
+    }
+  },
+  "CRM-10": {
+    title: "Engagement by post",
+    note: "The engagement recorded against each published item, with the leads it produced beside it. The number and its unit are recorded together — a count without a unit is refused (BR-38).",
+    build: () => {
+      const rows = all(`SELECT c.id, c.date, c.title, c.status, c.engagement_metric, c.engagement_value,
+                          ct.name AS type, cc.name AS channel, p.name AS person
+                        FROM content c
+                        LEFT JOIN content_type ct ON ct.id=c.type_id
+                        LEFT JOIN content_channel cc ON cc.id=c.channel_id
+                        LEFT JOIN users p ON p.id=c.person_id
+                        ORDER BY c.engagement_value DESC, c.date DESC`)
+        .map(c => ({
+          Date: c.date, Content: c.title, Channel: c.channel || "—", Type: c.type || "—",
+          Person: c.person || "—", Status: c.status,
+          Measure: c.engagement_metric || "not recorded",
+          Engagement: c.engagement_value ?? "",
+          "Leads (primary)": col("SELECT COUNT(*) FROM lead_content_touch WHERE content_id=? AND is_primary=1", c.id),
+          "Leads (touched)": col("SELECT COUNT(*) FROM lead_content_touch WHERE content_id=?", c.id)
+        }));
+      return { columns: cols(rows, ["Date", "Content", "Channel", "Type", "Person", "Status", "Measure",
+        "Engagement", "Leads (primary)", "Leads (touched)"]), rows };
     }
   }
 };
@@ -1013,10 +1217,14 @@ export function deleteReference(user, kind, id) {
 
 export function saveMovementRules(user, b) {
   need(user, "crm.setup.manage");
+  const min = b.reasonMin === undefined ? reasonMin() : Number(b.reasonMin);
+  if (!Number.isFinite(min) || min < 1 || min > 500)
+    refuse("BR-22", "The minimum length of a reason is a whole number between 1 and 500 characters.");
   for (const [k, v] of Object.entries({
     crm_allow_skip: b.allowSkip ? "1" : "0",
     crm_allow_back: b.allowBack ? "1" : "0",
-    crm_back_reason: b.backReason ? "1" : "0"
+    crm_back_reason: b.backReason ? "1" : "0",
+    crm_reason_min: String(Math.round(min))
   })) {
     const old = getSetting(k);
     if (String(old) === v) continue;

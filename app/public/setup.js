@@ -1,7 +1,7 @@
 // Setup: users, roles and permissions, stage model, exit criteria, reference data, audit trail.
 import {
   S, api, esc, fmtDT, fmtDate, can, me, ICON, toast, errToast, openForm, openPanel, openMenu,
-  confirmAction, dataTable, link, initials, refresh, go, render, stageList, setting
+  confirmAction, dataTable, link, initials, refresh, go, render, reboot, stageList, setting
 } from "./app.js";
 
 const TABS = [
@@ -44,29 +44,49 @@ export async function setup(tab = "users") {
 /* =================================================================== */
 /* USERS                                                                */
 /* =================================================================== */
+/* The permissions an administrator most often wants to see at a glance, as [key, short heading]. */
+const KEY_ACCESS = [
+  ["product.create", "Add product"], ["gate.submit", "Submit gate"], ["market.change", "Market state"],
+  ["crm.lead.create", "Add lead"], ["crm.lead.move", "Move lead"], ["crm.content.manage", "Content"],
+  ["users.manage", "Admin"]
+];
+
 async function usersTab() {
   const users = await api("/users");
   const roles = S.boot.roles;
   const rolePill = id => { const r = roles.find(x => x.id === id); return r ? `<span class="pill">${esc(r.name)}</span>` : ""; };
+  let view = "list";
 
   const html = `
   <div class="lvhead" style="padding-left:0;padding-right:0;border:none">
-    <span class="count">${users.length} user${users.length === 1 ? "" : "s"} · ${users.filter(u => u.active).length} active</span>
+    <span class="count" id="ucount">${users.length} user${users.length === 1 ? "" : "s"} · ${users.filter(u => u.active).length} active</span>
     <span class="spacer"></span>
-    <input class="inp" id="uq" type="search" placeholder="Search users…" style="width:16rem">
+    <div class="btngroup">
+      <button class="btn brand" data-view="list">People</button>
+      <button class="btn" data-view="matrix">Who can do what</button>
+    </div>
+    <input class="inp" id="uq" type="search" placeholder="Search users…" style="width:14rem">
     <button class="btn brand" data-a="new-user">${ICON.plus} New User</button>
   </div>
-  <div class="infobox">A user may hold any number of roles, and a role may be held by any number of users. Approval authority is not
-    granted here — it is read from the stage model, so whoever holds the approver role for a gate is the only person who may decide it (BR-07).
-    The separation of duties in BR-09 still applies even where one person holds both roles.</div>
+  <div class="infobox">Access is the union of the roles a person holds and anything granted to them directly, so
+    “only these three may move a lead between stages” needs no new role. Gate approval authority is the one thing
+    that cannot be granted here — it is read from the stage model, so whoever holds the approver role for a gate is
+    the only person who may decide it (BR-07), and the separation of duties in BR-09 still applies.</div>
   <div id="ubody">${userTable(users, rolePill)}</div>`;
 
   return {
     html,
     mount() {
-      const redraw = q => {
+      const draw = () => {
+        const q = (document.getElementById("uq").value || "").toLowerCase();
         const f = users.filter(u => !q || (u.name + " " + u.email + " " + (u.title || "")).toLowerCase().includes(q));
-        document.getElementById("ubody").innerHTML = userTable(f, rolePill);
+        document.getElementById("ubody").innerHTML = view === "list"
+          ? userTable(f, rolePill, q ? `No user matches “${q}”.` : "No users.") : accessMatrix(f);
+        document.getElementById("ucount").textContent = q
+          ? `${f.length} of ${users.length} user${users.length === 1 ? "" : "s"}`
+          : `${users.length} user${users.length === 1 ? "" : "s"} · ${users.filter(u => u.active).length} active`;
+        document.querySelectorAll("[data-view]").forEach(b =>
+          b.classList.toggle("brand", b.dataset.view === view));
         wire();
       };
       const wire = () => {
@@ -74,14 +94,31 @@ async function usersTab() {
         document.querySelectorAll("[data-pw]").forEach(b => b.onclick = () => resetPassword(users.find(u => u.id === +b.dataset.pw)));
         document.querySelectorAll("[data-toggle]").forEach(b => b.onclick = () => toggleUser(users.find(u => u.id === +b.dataset.toggle)));
       };
-      document.getElementById("uq").oninput = e => redraw(e.target.value.toLowerCase());
+      document.getElementById("uq").oninput = draw;
+      document.querySelectorAll("[data-view]").forEach(b => b.onclick = () => { view = b.dataset.view; draw(); });
       document.querySelector('[data-a="new-user"]').onclick = () => editUser(null, roles);
       wire();
     }
   };
 }
 
-const userTable = (users, rolePill) => dataTable({
+/** One row per person, one column per permission an administrator asks about most. */
+const accessMatrix = users => `<div class="tablewrap"><table class="dt">
+  <thead><tr><th>Person</th>${KEY_ACCESS.map(([, h]) => `<th class="c">${esc(h)}</th>`).join("")}<th>Approves gates</th></tr></thead>
+  <tbody>${users.map(u => `<tr>
+    <td><b>${esc(u.name)}</b><div style="font-size:.6875rem;color:var(--ink-4)">${esc(u.title || u.email)}${
+      u.active ? "" : " · inactive"}</div></td>
+    ${KEY_ACCESS.map(([k]) => `<td class="c">${u.permissions.includes(k)
+      ? `<span style="color:var(--success)" title="${u.direct.includes(k) ? "granted directly" : "from a role"}">${ICON.check}</span>${
+          u.direct.includes(k) ? `<sup style="color:var(--brand)" title="granted directly">•</sup>` : ""}`
+      : `<span style="color:var(--line-2)">—</span>`}</td>`).join("")}
+    <td>${(u.approves || []).length ? u.approves.map(n => `<span class="badge b">${n}</span>`).join(" ") : "—"}</td>
+  </tr>`).join("")}</tbody></table>
+  <p class="note" style="padding:.5rem .75rem">A <span style="color:var(--brand)">•</span> means the access was granted
+    to that person directly rather than through a role. Approval authority comes from the stage model, never from this table.</p>
+</div>`;
+
+const userTable = (users, rolePill, empty) => dataTable({
   columns: [
     { label: "Name", cell: u => `<div style="display:flex;align-items:center;gap:.5rem">
         <span class="avatar" style="background:${u.active ? "#5867E8" : "#C9C9C9"}">${esc(initials(u.name))}</span>
@@ -96,13 +133,45 @@ const userTable = (users, rolePill) => dataTable({
         <button class="btn sm" data-pw="${u.id}">Reset password</button>
         <button class="btn sm ${u.active ? "danger" : ""}" data-toggle="${u.id}">${u.active ? "Deactivate" : "Activate"}</button>
       </div>` }
-  ], rows: users, empty: "No users."
+  ], rows: users, empty: empty || "No users."
 });
 
+/**
+ * Access, laid out the way an administrator thinks about it: Product Lifecycle on the left, CRM on the
+ * right, grouped inside each. A tick a role already grants is shown checked and locked, with the role
+ * named; every other tick is a grant to this person alone. The form only ever submits the extras.
+ */
+function accessEditor(u, roles) {
+  const perms = S.boot.permissions;                       // [key, label, module, group]
+  const held = roles.filter(r => (u?.role_ids || []).includes(r.id));
+  const roleFor = key => held.find(r => (r.permissions || "").split(",").includes(key));
+  const direct = new Set(u?.direct || []);
+  const modules = [...new Set(perms.map(p => p[2] || "Other"))];
+  const box = mod => {
+    const mine = perms.filter(p => (p[2] || "Other") === mod);
+    const groups = [...new Set(mine.map(p => p[3] || ""))];
+    return `<div class="mod"><h4>${esc(mod)}</h4>${groups.map(g => `
+      ${g ? `<div class="grp">${esc(g)}</div>` : ""}
+      ${mine.filter(p => (p[3] || "") === g).map(([key, label]) => {
+        const r = roleFor(key);
+        return `<label class="checkline" title="${esc(key)}">
+          <input type="checkbox" name="permissions" value="${esc(key)}"
+            ${r ? "checked disabled" : direct.has(key) ? "checked" : ""}>
+          <span>${esc(label)}${r ? ` <span class="badge" style="font-size:.5625rem">from ${esc(r.name)}</span>` : ""}</span>
+        </label>`;
+      }).join("")}`).join("")}</div>`;
+  };
+  return `<div class="accgrid">${modules.map(box).join("")}</div>`;
+}
+
 function editUser(u, roles) {
-  openForm({
-    title: u ? `Edit ${u.name}` : "New User", size: "",
-    rule: u ? "" : `A new user is created with a temporary password and is asked to change it on first sign-in (NFR-06).`,
+  return openForm({
+    title: u ? `Edit ${u.name}` : "New User", size: "lg",
+    rule: u
+      ? `Access is the union of the roles held and the extra ticks below. A tick a role already grants is locked —
+         take the role away to remove it. Approval authority is never granted here; it comes from the stage model (BR-07).`
+      : `A new user is created with a temporary password and is asked to change it on first sign-in (NFR-06).
+         Give them a role, or tick exactly what they may do, or both.`,
     fields: [
       { name: "name", label: "Full name", value: u?.name, required: true },
       { name: "email", label: "Email", type: "email", value: u?.email, required: true },
@@ -111,14 +180,16 @@ function editUser(u, roles) {
         help: "At least 8 characters. Leave blank to use the default." }]),
       { name: "role_ids", label: "Roles", type: "checkboxes", numeric: true, cols: "full", value: u?.role_ids || [],
         options: roles.map(r => ({ value: r.id, label: r.name, hint: r.description })),
-        help: "Any role may be assigned to any user, and a user may hold several. Permissions are the union of the roles held." },
+        help: "A role is a reusable bundle of access. A user may hold several, or none." },
+      { type: "html", html: `<div class="field full"><label>Access</label>${accessEditor(u, roles)}
+        <div class="help">Ticking a role above does not refresh this list until the user is saved and reopened —
+          the locked ticks below reflect the roles the user holds now.</div></div>` },
       ...(u ? [{ name: "active", label: "Active — may sign in", type: "checkbox", checked: !!u.active, cols: "full" }] : [])
     ],
     submit: u ? "Save user" : "Create user",
     onSubmit: async d => {
       await api(u ? `/users/${u.id}` : "/users", { method: u ? "PATCH" : "POST", body: d });
-      S.boot = await api("/bootstrap");
-      toast("ok", u ? "User updated." : "User created."); await render();
+      await reboot(u ? "User updated." : "User created.");
     }
   });
 }
@@ -142,7 +213,7 @@ function toggleUser(u) {
     submit: u.active ? "Deactivate" : "Activate", danger: !!u.active,
     onConfirm: async () => {
       await api(`/users/${u.id}`, { method: "PATCH", body: { name: u.name, email: u.email, title: u.title, active: !u.active } });
-      S.boot = await api("/bootstrap"); toast("ok", "User updated."); await render();
+      await reboot("User updated.");
     }
   });
 }
@@ -152,7 +223,7 @@ function toggleUser(u) {
 /* =================================================================== */
 async function rolesTab() {
   const roles = S.boot.roles, perms = S.boot.permissions, users = S.boot.users;
-  const holders = r => users.filter(u => (u.roles || "").split(", ").includes(r.name));
+  const holders = r => users.filter(u => String(u.role_ids || "").split(",").filter(Boolean).map(Number).includes(r.id));
   const stagesFor = r => S.boot.stages.filter(s => s.approver_role_id === r.id).map(s => s.seq).sort((a, b) => a - b);
 
   const html = `
@@ -201,7 +272,7 @@ async function rolesTab() {
         confirmAction({
           title: `Delete role ${r.name}`, body: "Users holding this role lose its permissions. Roles referenced by the stage model cannot be deleted.",
           submit: "Delete role", danger: true,
-          onConfirm: async () => { await api(`/roles/${r.id}`, { method: "DELETE" }); S.boot = await api("/bootstrap"); toast("ok", "Role deleted."); await render(); }
+          onConfirm: async () => { await api(`/roles/${r.id}`, { method: "DELETE" }); await reboot("Role deleted."); }
         });
       });
       document.querySelector('[data-a="new-role"]').onclick = () => editRole(null, perms);
@@ -224,7 +295,7 @@ function editRole(r, perms) {
     submit: r ? "Save role" : "Create role",
     onSubmit: async d => {
       await api(r ? `/roles/${r.id}` : "/roles", { method: r ? "PATCH" : "POST", body: d });
-      S.boot = await api("/bootstrap"); toast("ok", r ? "Role updated." : "Role created."); await render();
+      await reboot(r ? "Role updated." : "Role created."); await render();
     }
   });
 }
@@ -289,7 +360,7 @@ async function stagesTab() {
           submit: "Save stage",
           onSubmit: async d => {
             await api(`/stages/${s.id}`, { method: "PATCH", body: d });
-            S.boot = await api("/bootstrap"); toast("ok", "Stage model updated."); await render();
+            await reboot("Stage model updated.");
           }
         });
       });
@@ -341,7 +412,7 @@ function critForm(c, stageId) {
     submit: c ? "Save" : "Add criterion",
     onSubmit: async d => {
       await api(c ? `/criteria/${c.id}` : "/criteria", { method: c ? "PATCH" : "POST", body: { ...d, stage_id: stageId } });
-      S.boot = await api("/bootstrap"); toast("ok", "Exit criteria updated."); await render();
+      await reboot("Exit criteria updated.");
     }
   });
 }
@@ -363,9 +434,14 @@ async function settingsTab() {
           ${s.kind === "list"
             ? `<textarea class="inp" id="s_${s.key}" name="${s.key}" rows="3">${esc(s.value.split("|").join("\n"))}</textarea>
                <div class="help">One value per line. Removing a value in use will not rewrite existing records.</div>`
-            : `<input class="inp" id="s_${s.key}" name="${s.key}" type="${s.kind === "number" ? "number" : "text"}"
-                 value="${esc(s.value)}" ${s.kind === "number" ? 'step="any"' : ""}>
-               <div class="help mono" style="font-size:.625rem">${esc(s.key)}</div>`}
+            : s.kind === "bool"
+              ? `<label class="checkline"><input type="hidden" name="${s.key}" value="0">
+                   <input type="checkbox" name="${s.key}" value="1" ${s.value === "1" ? "checked" : ""}>
+                   <span>On</span></label>
+                 <div class="help mono" style="font-size:.625rem">${esc(s.key)}</div>`
+              : `<input class="inp" id="s_${s.key}" name="${s.key}" type="${s.kind === "number" ? "number" : "text"}"
+                   value="${esc(s.value)}" ${s.kind === "number" ? 'step="any"' : ""}>
+                 <div class="help mono" style="font-size:.625rem">${esc(s.key)}</div>`}
         </div>`).join("")}
       </div>
       <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:.75rem">
@@ -389,7 +465,7 @@ async function settingsTab() {
           const m = meta.find(s => s.key === k);
           body[k] = m?.kind === "list" ? String(v).split("\n").map(x => x.trim()).filter(Boolean).join("|") : v;
         }
-        try { await api("/settings", { method: "POST", body }); S.boot = await api("/bootstrap"); toast("ok", "Settings saved."); await render(); }
+        try { await api("/settings", { method: "POST", body }); await reboot("Settings saved."); }
         catch (err) { errToast(err); }
       };
     }
@@ -399,11 +475,15 @@ async function settingsTab() {
 /* =================================================================== */
 /* AUDIT                                                                */
 /* =================================================================== */
+let auditFilter = { entity: "", q: "" };
+
 async function auditTab() {
-  const rows = await api("/audit");
-  return {
-    flush: true,
-    html: dataTable({
+  const rows = await api("/audit" + (auditFilter.entity ? `?entity=${encodeURIComponent(auditFilter.entity)}` : ""));
+  const entities = [...new Set(rows.map(r => r.entity))].sort();
+  const match = () => rows.filter(a => !auditFilter.q ||
+    (a.summary + " " + a.action + " " + (a.field || "") + " " + (a.user_name || "") + " " +
+      (a.old_value || "") + " " + (a.new_value || "")).toLowerCase().includes(auditFilter.q));
+  const table = list => dataTable({
       columns: [
         { label: "When", cell: a => fmtDT(a.created_at) },
         { label: "Entity", cell: a => `<span class="badge">${esc(a.entity)}</span>${a.entity_id ? ` <span class="mono" style="font-size:.625rem">#${a.entity_id}</span>` : ""}` },
@@ -413,7 +493,26 @@ async function auditTab() {
         { label: "From", cell: a => `<span class="trunc" style="max-width:14rem">${esc(a.old_value || "")}</span>` },
         { label: "To", cell: a => `<span class="trunc" style="max-width:14rem">${esc(a.new_value || "")}</span>` },
         { label: "By", cell: a => esc(a.user_name || "system") }
-      ], rows, empty: "No audit entries."
-    })
+      ], rows: list, empty: auditFilter.q || auditFilter.entity ? "No entry matches this view." : "No audit entries."
+    });
+  const shown = match();
+  return {
+    html: `<div class="filterbar" style="margin:-.75rem -.75rem .5rem">
+        <select class="inp" id="aent" style="width:auto"><option value="">Every entity</option>
+          ${entities.map(e => `<option value="${esc(e)}" ${auditFilter.entity === e ? "selected" : ""}>${esc(e)}</option>`).join("")}</select>
+        <input class="inp" id="aq" type="search" placeholder="Search the trail…" value="${esc(auditFilter.q)}" style="width:16rem">
+        <span class="count" id="acount">${shown.length} entr${shown.length === 1 ? "y" : "ies"}</span>
+        ${rows.length >= 400 ? `<span class="badge y">only the most recent 400 are loaded</span>` : ""}
+      </div>
+      <div id="abody">${table(shown)}</div>`,
+    mount() {
+      document.getElementById("aent").onchange = e => { auditFilter.entity = e.target.value; render(); };
+      document.getElementById("aq").oninput = e => {
+        auditFilter.q = e.target.value.toLowerCase();
+        const list = match();
+        document.getElementById("abody").innerHTML = table(list);
+        document.getElementById("acount").textContent = `${list.length} entr${list.length === 1 ? "y" : "ies"}`;
+      };
+    }
   };
 }

@@ -12,7 +12,8 @@ process.env.PLM_SEED_PASSWORD = "TestPass@2026";
 
 const db = await import("./db.mjs");
 const { seedIfEmpty } = await import("./seed.mjs");
-const { seedCRMIfEmpty, GATE_REQUIREMENTS, seedDefaultRequirements } = await import("./crm-seed.mjs");
+const { seedCRMIfEmpty, migrateCRM, GATE_REQUIREMENTS, GATE_CONDITIONAL, EARLY_REQUIREMENTS,
+  CLOSURE_REQUIREMENTS, CSE_REQUIREMENTS, seedDefaultRequirements } = await import("./crm-seed.mjs");
 const A = await import("./api.mjs");
 const C = await import("./crm.mjs");
 const { today } = await import("./lib.mjs");
@@ -53,6 +54,8 @@ const DARWIN = mk("Darwin", "darwin@assured.local", "CRM Administrator");
 const SIDDIQUE = mk("Siddique", "siddique@assured.local", "CRM Sales User");
 const SHIREEN = mk("Shireen", "shireen@assured.local", "CRM Sales User");
 const PLMONLY = mk("Chief Executive", "ceo@assured.local", "CEO");   // no CRM permission at all
+const CONTRIB = mk("Contributor", "contrib@assured.local", "CRM Contributor");
+const DIRECT = mk("Direct Grant", "direct@assured.local", "CRM Sales User");
 const BH = mk("Business Head", "business.head@assured.local", "Business Head");
 const SOLH = mk("Solutions Head", "solutions.head@assured.local", "Solutions Head");
 const CEOU = PLMONLY;
@@ -70,9 +73,16 @@ eq(db.col("SELECT COUNT(*) FROM offering"), 12, "§9.5 twelve offerings");
 eq(db.col("SELECT COUNT(*) FROM content_type"), 7, "§9.9 seven content types");
 eq(db.col("SELECT COUNT(*) FROM content_channel"), 4, "§9.9 four content channels");
 eq(db.col("SELECT COUNT(*) FROM stage_template"), 11, "§9.6 eleven stage templates");
-eq(db.col("SELECT COUNT(*) FROM lead_field"), 17, "§9.7 seventeen lead fields");
-eq(db.col("SELECT COUNT(*) FROM lead_field WHERE active=1"), 14, "§9.7 fourteen active fields");
-eq(db.col("SELECT COUNT(*) FROM lead_field WHERE active=0"), 3, "§9.7 value, btype and bsegment ship switched off");
+eq(db.col("SELECT COUNT(*) FROM lead_field"), 18, "§9.7 eighteen lead fields");
+eq(db.col("SELECT COUNT(*) FROM lead_field WHERE active=1"), 15, "§9.7 fifteen active fields");
+eq(db.col("SELECT COUNT(*) FROM lead_field WHERE active=0"), 3, "§9.7 content, btype and bsegment ship switched off");
+eq(db.col("SELECT type FROM lead_field WHERE key='activity'"), "content",
+  "Activity Name is a picker over the content calendar, not free text");
+eq(db.col("SELECT active FROM lead_field WHERE key='value'"), 1, "Estimated Annual Order Value ships switched on");
+eq(db.col("SELECT active FROM lead_field WHERE key='invoice_no'"), 1, "Odoo Invoice Number ships switched on");
+eq(db.col("SELECT active FROM lead_field WHERE key='content'"), 0,
+  "Attributed Content is retired into Activity Name");
+eq(migrateCRM(), false, "the migration is a no-op on a database the current seed just wrote");
 eq(db.col("SELECT COUNT(*) FROM offering WHERE revenue_category IS NOT NULL"), 0, "Finding 4 / OI-01 revenue_category left NULL");
 eq(db.col("SELECT COUNT(*) FROM channel WHERE name LIKE 'Personal Branding%' AND mode='Online'"), 4,
   "Finding 7 four Personal Branding channels ship as Online");
@@ -113,12 +123,22 @@ refused(() => C.savePipeline(VIKRAM, null, { name: "Duplicate", offering_id: off
 
 for (const p of db.all("SELECT id, name FROM pipeline")) {
   const gate = db.one("SELECT * FROM pipeline_stage WHERE pipeline_id=? AND is_gate=1", p.id);
-  eq(db.col("SELECT COUNT(*) FROM stage_requirement WHERE pipeline_stage_id=?", gate.id), GATE_REQUIREMENTS.length,
-    `§9.8 ${p.name} carries all ten gate requirements`);
+  eq(db.col("SELECT COUNT(*) FROM stage_requirement WHERE pipeline_stage_id=?", gate.id),
+    GATE_REQUIREMENTS.length + GATE_CONDITIONAL.length,
+    `§9.8 ${p.name} carries every gate requirement`);
+  eq(db.col("SELECT level FROM stage_requirement WHERE pipeline_stage_id=? AND field_key='activity'", gate.id), 2,
+    `§9.8 ${p.name} asks for Activity Name only when the Lead Source is Online`);
+  const second = db.one("SELECT * FROM pipeline_stage WHERE pipeline_id=? AND seq=2", p.id);
+  eq(db.col("SELECT level FROM stage_requirement WHERE pipeline_stage_id=? AND field_key='value'", second.id), 1,
+    `§9.8 ${p.name} asks for the Estimated Annual Order Value before the lead leaves stage one`);
+  const closed = db.one("SELECT * FROM pipeline_stage WHERE pipeline_id=? AND band='Closed' ORDER BY seq LIMIT 1", p.id);
+  eq(db.col("SELECT level FROM stage_requirement WHERE pipeline_stage_id=? AND field_key='invoice_no'", closed.id), 1,
+    `§9.8 ${p.name} asks for the Odoo Invoice Number before the Closed band`);
 }
 const cseStage = db.one("SELECT * FROM pipeline_stage WHERE pipeline_id=(SELECT id FROM pipeline LIMIT 1) AND band='CSE' ORDER BY seq LIMIT 1");
 eq(db.col("SELECT level FROM stage_requirement WHERE pipeline_stage_id=? AND field_key='location'", cseStage.id), 1, "§9.8 location is level 1 at the first CSE stage");
-eq(db.col("SELECT level FROM stage_requirement WHERE pipeline_stage_id=? AND field_key='content'", cseStage.id), 2, "§9.8 content is level 2 at the first CSE stage");
+eq(db.col("SELECT COUNT(*) FROM stage_requirement WHERE field_key='content'"), 0,
+  "§9.8 the retired Attributed Content field is required nowhere");
 
 // Deactivating a pipeline frees its pairs; a new pipeline for a freed pair is then accepted.
 const lp = db.one("SELECT * FROM pipeline WHERE offering_id=?", offId("LP"));
@@ -131,6 +151,8 @@ ok(!!C.resolvePipeline(offId("LP"), idOf("industry", "Trading and distribution")
 refused(() => C.createLead(VIKRAM, { company: "" }), "BR-02", "blank company", ["company name"]);
 refused(() => C.createLead(VIKRAM, { company: "   " }), "BR-02", "whitespace-only company");
 refused(() => C.createLead(PLMONLY, { company: "No permission" }), "FR-43", "a user with no CRM permission cannot create a lead");
+refused(() => C.createLead(CONTRIB, { company: "No create permission" }), "FR-43",
+  "a user who may edit leads but not add one", ["Add a new lead"]);
 
 const a = C.createLead(SIDDIQUE, { company: "Gulf Metals LLC" });
 eq(a.company, "Gulf Metals LLC", "BR-01 a lead is created with a company name alone");
@@ -176,24 +198,34 @@ let B = C.getLead(b.id);
 const stages = C.pipelineStages(B.pipeline_id);
 const gateSeq = stages.find(s => s.is_gate).seq;
 
-// Walk to the stage before the gate — nothing is required before it.
-for (let s = 2; s < gateSeq; s++) C.attemptMove(SIDDIQUE, b.id, { to_seq: s });
-eq(C.getLead(b.id).stage_seq, gateSeq - 1, "§9.8 nothing is required before the qualification gate");
+// The very first move asks for the Estimated Annual Order Value and nothing else.
+refused(() => C.attemptMove(SIDDIQUE, b.id, { to_seq: 2 }), "BR-16",
+  "leaving stage one without an estimated annual order value", ["Estimated Annual Order Value (AED)"]);
+refused(() => C.updateLead(SIDDIQUE, b.id, { value: "not a number" }), "FR-38",
+  "an estimated annual order value that is not a number");
+refused(() => C.updateLead(SIDDIQUE, b.id, { value: -5 }), "FR-38", "a negative estimated annual order value");
+C.updateLead(SIDDIQUE, b.id, { value: "1,250,000" });
+eq(C.getLead(b.id).est_annual_value, 1250000, "the estimated annual order value is stored as a number, commas and all");
 
-const SEVEN = ["Customer Name", "Designation", "Contact", "Email", "Customer Segment", "Channel", "Activity Name"];
+// Walk to the stage before the gate — nothing else is required before it.
+for (let s = 2; s < gateSeq; s++) C.attemptMove(SIDDIQUE, b.id, { to_seq: s });
+eq(C.getLead(b.id).stage_seq, gateSeq - 1, "§9.8 nothing beyond the annual value is required before the gate");
+
+const SIX = ["Customer Name", "Designation", "Contact", "Email", "Customer Segment", "Channel"];
 refused(() => C.attemptMove(SIDDIQUE, b.id, { to_seq: gateSeq }), "BR-16",
-  "the gate with only company, offering and industry recorded", SEVEN);
+  "the gate with only company, offering, industry and value recorded", SIX);
 try { C.attemptMove(SIDDIQUE, b.id, { to_seq: gateSeq }); } catch (e) {
-  eq(e.missing.length, 7, "BR-16 with BR-19 the refusal names exactly the seven outstanding gate fields");
+  eq(e.missing.length, 6, "BR-16 with BR-19 the refusal names exactly the six outstanding gate fields");
   ok(!e.message.includes("Lead Source"), "BR-19 the derived Lead Source is omitted while Channel is itself unmet");
+  ok(!e.message.includes("Activity Name"),
+    "BR-17 Activity Name is not asked for while the Lead Source is unknown");
 }
 
-// Fill six of the seven; still refused, naming the seventh.
+// Fill five of the six; still refused, naming the sixth.
 C.updateLead(SIDDIQUE, b.id, { customer: "Reem Al Habtoor", designation: "Head of Operations",
-  contact: "+971 50 000 0000", email: "reem@northline.example", segment: idOf("customer_segment", "Corporates (500+ employees)"),
-  activity: "Warehouse throughput review" });
+  contact: "+971 50 000 0000", email: "reem@northline.example", segment: idOf("customer_segment", "Corporates (500+ employees)") });
 refused(() => C.attemptMove(SIDDIQUE, b.id, { to_seq: gateSeq }), "BR-16",
-  "six of the seven filled still refuses, naming the seventh", ["Channel"]);
+  "five of the six filled still refuses, naming the sixth", ["Channel"]);
 
 // Overriding Lead Source while Channel is unmet reinstates it in the list (BR-19 applies only to the derived case).
 C.overrideSource(SIDDIQUE, b.id, { source: "Offline", reason: "Recorded manually pending the channel being confirmed." });
@@ -222,15 +254,17 @@ refused(() => C.attemptMove(SIDDIQUE, b.id, { to_seq: gateSeq + 1 }), "BR-16",
   "BR-15 a field required at the gate is still enforced at every later stage", ["Designation"]);
 C.updateLead(SIDDIQUE, b.id, { designation: "Head of Operations" });
 
-// BR-17 — level 2 only bites when the source is Online.
+// BR-17 — level 2 only bites when the source is Online. This is the user-facing rule
+// "when the channel is Offline we do not have to fill the Activity Name".
 const cse = C.pipelineStages(B.pipeline_id).find(s => s.band === "CSE");
 C.updateLead(SIDDIQUE, b.id, { location: "Jebel Ali" });
 C.attemptMove(SIDDIQUE, b.id, { to_seq: cse.seq });
-eq(C.getLead(b.id).stage_seq, cse.seq, "BR-17 a level-2 requirement is ignored while Lead Source is Offline");
+eq(C.getLead(b.id).stage_seq, cse.seq, "BR-17 Activity Name is not asked for while the channel is Offline");
 C.attemptMove(SIDDIQUE, b.id, { to_seq: gateSeq, reason: "Stepping back to prove the Online condition." });
 C.updateLead(SIDDIQUE, b.id, { channel: idOf("channel", "Tenders / Online") });
 refused(() => C.attemptMove(SIDDIQUE, b.id, { to_seq: cse.seq }), "BR-16",
-  "BR-17 a level-2 requirement is enforced once Lead Source is Online", ["Attributed Content", "required because Lead Source is Online"]);
+  "BR-17 Activity Name is enforced once the channel is Online",
+  ["Activity Name", "required because Lead Source is Online"]);
 C.updateLead(SIDDIQUE, b.id, { channel: idOf("channel", "Research & walk-in") });
 C.attemptMove(SIDDIQUE, b.id, { to_seq: cse.seq });
 
@@ -250,7 +284,7 @@ refused(() => C.setRequirement(VIKRAM, { pipeline_stage_id: rtxGate.id, field_ke
 
 // BR-21 — skipping.
 const c = C.createLead(SIDDIQUE, { company: "Skiptest Trading" });
-C.updateLead(SIDDIQUE, c.id, { offering: offId("CLX"), industry: idOf("industry", "UAE Real Estate") });
+C.updateLead(SIDDIQUE, c.id, { offering: offId("CLX"), industry: idOf("industry", "UAE Real Estate"), value: 60000 });
 refused(() => C.attemptMove(SIDDIQUE, c.id, { to_seq: 3 }), "BR-21", "skipping two stages while allowSkip is off", ["one at a time"]);
 C.saveMovementRules(VIKRAM, { allowSkip: true, allowBack: true, backReason: true });
 refused(() => C.attemptMove(SIDDIQUE, c.id, { to_seq: 3 }), "BR-16",
@@ -270,14 +304,15 @@ C.saveMovementRules(VIKRAM, { allowSkip: false, allowBack: true, backReason: tru
 // BR-18 — deactivating a field removes it from enforcement immediately.
 const d = C.createLead(SIDDIQUE, { company: "Fieldtest Manufacturing" });
 C.updateLead(SIDDIQUE, d.id, { offering: offId("QMX"), industry: idOf("industry", "Manufacturing") });
+C.updateLead(SIDDIQUE, d.id, { value: 90000 });
 const dGate = C.pipelineStages(C.getLead(d.id).pipeline_id).find(s => s.is_gate).seq;
 for (let s = 2; s < dGate; s++) C.attemptMove(SIDDIQUE, d.id, { to_seq: s });
 const beforeCount = (() => { try { C.attemptMove(SIDDIQUE, d.id, { to_seq: dGate }); return 0; } catch (e) { return e.missing.length; } })();
-const actField = db.one("SELECT * FROM lead_field WHERE key='activity'");
-C.saveField(VIKRAM, { id: actField.id, active: false });
+const segField = db.one("SELECT * FROM lead_field WHERE key='segment'");
+C.saveField(VIKRAM, { id: segField.id, active: false });
 const afterCount = (() => { try { C.attemptMove(SIDDIQUE, d.id, { to_seq: dGate }); return 0; } catch (e) { return e.missing.length; } })();
 eq(afterCount, beforeCount - 1, "BR-18 deactivating a field removes it from enforcement immediately");
-C.saveField(VIKRAM, { id: actField.id, active: true });
+C.saveField(VIKRAM, { id: segField.id, active: true });
 
 // BR-20 — a requirement added to a stage a lead has already passed does not move or invalidate it.
 const bStageBefore = C.getLead(b.id).stage_seq;
@@ -349,6 +384,60 @@ eq(db.col("SELECT COUNT(*) FROM content WHERE id=?", c3.id), 0, "BR-34 unattribu
 const aug = C.contentForMonth(2026, 8);
 eq(aug.length, 2, "FR-19 the month grid and the planning table return the same item set");
 eq(C.contentForMonth(2027, 3).length, 0, "FR-18 a month with no content renders without error");
+
+// Activity Name is the content picker, and it carries the primary attribution with it.
+refused(() => C.updateLead(SIDDIQUE, b.id, { activity: "free text" }), "BR-33",
+  "Activity Name typed as free text rather than chosen from the calendar", ["Content Calendar"]);
+refused(() => C.updateLead(SIDDIQUE, b.id, { activity: 99999 }), "BR-33",
+  "Activity Name pointing at a content item that does not exist");
+C.updateLead(SIDDIQUE, b.id, { activity: c1.id });
+const withAct = C.getLead(b.id);
+eq(withAct.activity, c1.title, "choosing an Activity Name snapshots the content title onto the lead");
+eq(withAct.primary_content_id, c1.id, "BR-33 the Activity Name is the primary attribution");
+eq(withAct.activity_channel_name, "LinkedIn", "the lead carries the social channel of the content it came from");
+eq(db.col("SELECT is_primary FROM lead_content_touch WHERE lead_id=? AND content_id=?", b.id, c1.id), 1,
+  "BR-33 the chosen item is also a touch, and the primary one");
+C.saveContent(SHIREEN, c1.id, { ...c1, title: "Warehouse throughput teardown (revised)" });
+eq(C.getLead(b.id).activity, "Warehouse throughput teardown (revised)",
+  "renaming the content keeps every lead's Activity Name in step");
+C.updateLead(SIDDIQUE, b.id, { activity: "" });
+eq(C.getLead(b.id).primary_content_id, null, "clearing the Activity Name clears the primary attribution");
+C.updateLead(SIDDIQUE, b.id, { activity: c2.id });
+
+// BR-38 — engagement is a number and the unit it is counted in; neither half stands alone.
+refused(() => C.saveContent(SHIREEN, null, { date: "2026-08-21", title: "E1", type_id: ct, channel_id: cc,
+  person_id: SHIREEN.id, engagement_value: 900 }), "BR-38", "an engagement number with no unit", ["unit"]);
+refused(() => C.saveContent(SHIREEN, null, { date: "2026-08-21", title: "E2", type_id: ct, channel_id: cc,
+  person_id: SHIREEN.id, engagement_metric: "Views" }), "BR-38", "an engagement unit with no number");
+refused(() => C.saveContent(SHIREEN, null, { date: "2026-08-21", title: "E3", type_id: ct, channel_id: cc,
+  person_id: SHIREEN.id, engagement_metric: "Claps", engagement_value: 5 }), "BR-38", "an engagement unit that is not one of the three");
+refused(() => C.saveContent(SHIREEN, null, { date: "2026-08-21", title: "E4", type_id: ct, channel_id: cc,
+  person_id: SHIREEN.id, engagement_metric: "Views", engagement_value: -1 }), "BR-38", "a negative engagement number");
+const eng = C.saveContent(SHIREEN, null, { date: "2026-08-22", title: "Racking teardown", type_id: ct,
+  channel_id: cc, person_id: SHIREEN.id, status: "Published", engagement_metric: "Impressions", engagement_value: "12,400" });
+eq(eng.engagement_value, 12400, "BR-38 engagement is stored as a whole number");
+eq(eng.engagement_metric, "Impressions", "BR-38 engagement carries the unit it is counted in");
+
+// BR-39 — publishing targets, measured against the calendar and never typed in.
+refused(() => C.saveTarget(SHIREEN, null, { period: "August", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 4 }),
+  "BR-39", "a target for a month that is not written YYYY-MM");
+refused(() => C.saveTarget(SHIREEN, null, { period: "2026-08", type_id: ct, person_id: SHIREEN.id, target: 4 }),
+  "BR-39", "a target with no channel", ["Channel"]);
+refused(() => C.saveTarget(SHIREEN, null, { period: "2026-08", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 0 }),
+  "BR-39", "a target of zero");
+refused(() => C.saveTarget(SHIREEN, null, { period: "2026-08", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 2.5 }),
+  "BR-39", "a fractional target");
+const tg = C.saveTarget(SHIREEN, null, { period: "2026-08", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 4 });
+eq(tg.length, 1, "BR-39 a target is set for one month, channel, content type and person");
+eq(tg[0].published, 1, "BR-39 achievement is counted from the published content, not stored");
+eq(tg[0].target, 4, "BR-39 the target is what was set");
+eq(tg[0].gap, 3, "BR-39 the gap is the target less what was published");
+refused(() => C.saveTarget(SHIREEN, null, { period: "2026-08", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 9 }),
+  "BR-39", "a second target for the same person, channel, type and month", ["already set"]);
+refused(() => C.saveTarget(CONTRIB, null, { period: "2026-09", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 2 }),
+  "FR-43", "a user without crm.content.manage setting a target", ["Plan and publish content"]);
+C.deleteTarget(SHIREEN, tg[0].id);
+eq(C.listTargets("2026-08").length, 0, "BR-39 a target can be removed without touching the content behind it");
 
 /* ================= Iteration 7 — configuration (≥16) ================= */
 const pipe = db.one("SELECT * FROM pipeline WHERE offering_id=?", offId("XLC"));
@@ -438,12 +527,35 @@ ok(db.col("SELECT COUNT(*) FROM audit WHERE entity='setting' AND summary LIKE '%
 /* ================= Iteration 8 — access, reports, PLM hand-off (≥16) ================= */
 refused(() => C.savePipeline(SIDDIQUE, null, { name: "X", offering_id: offId("LP"), template_id: 1, industry_ids: [1] }),
   "FR-43", "a Sales User creating a pipeline", ["crm.setup.manage"]);
+// Direct grants: access without inventing a role for every combination.
+A.saveUser(ADMIN, DIRECT.id, { name: "Direct Grant", email: "direct@assured.local",
+  role_ids: [], permissions: ["crm.lead.create", "crm.lead.manage"] });
+const D1 = user("direct@assured.local");
+eq(D1.roleNames.length, 0, "a user may hold no role at all");
+ok(D1.permissions.includes("crm.lead.create"), "a permission granted directly reaches the user");
+const dLead = C.createLead(D1, { company: "Direct Grant Holdings" });
+refused(() => C.attemptMove(D1, dLead.id, { to_seq: 2 }), "FR-43", "a directly-granted user without the move permission");
+A.saveUser(ADMIN, DIRECT.id, { name: "Direct Grant", email: "direct@assured.local",
+  role_ids: [db.col("SELECT id FROM roles WHERE name='CRM Sales User'")], permissions: [] });
+const D2 = user("direct@assured.local");
+ok(D2.permissions.includes("crm.lead.move"), "a role restores the access a direct grant gave");
+eq(D2.directPermissions.length, 0, "access a role already grants is not stored a second time as a direct grant");
 refused(() => C.saveStages(SIDDIQUE, pipe.id, { stages: ps() }), "FR-43", "a Sales User editing stages");
 refused(() => C.setRequirement(SIDDIQUE, { pipeline_stage_id: xg.id, field_key: "location", level: 1 }), "FR-43", "a Sales User editing the requirement matrix");
 refused(() => C.saveField(SIDDIQUE, { key: "x", label: "X", type: "text" }), "FR-43", "a Sales User editing the field catalogue");
 refused(() => C.saveReference(SIDDIQUE, "industry", { name: "X" }), "FR-43", "a Sales User editing reference data");
 refused(() => C.saveMovementRules(SIDDIQUE, { allowSkip: true }), "FR-43", "a Sales User editing movement rules");
+refused(() => C.savePipeline(SIDDIQUE, null, { name: "X", offering_id: offId("LP"), template_id: 1, industry_ids: [1] }),
+  "FR-43", "the refusal names the access that is missing", ["do not have access"]);
 ok(C.crmBootstrap(SIDDIQUE).canLead, "FR-43 a Sales User can work leads");
+ok(C.crmBootstrap(SIDDIQUE).canCreateLead, "FR-43 a Sales User can add a lead");
+ok(C.crmBootstrap(SIDDIQUE).canMoveLead, "FR-43 a Sales User can move a lead between stages");
+ok(C.crmBootstrap(CONTRIB).canLead, "FR-43 a Contributor can edit the leads they hold");
+ok(!C.crmBootstrap(CONTRIB).canCreateLead, "FR-43 a Contributor cannot add a lead");
+ok(!C.crmBootstrap(CONTRIB).canMoveLead, "FR-43 a Contributor cannot move a lead between stages");
+refused(() => C.attemptMove(CONTRIB, c.id, { to_seq: 2 }), "FR-43",
+  "a Contributor moving a lead between stages", ["Move a lead between pipeline stages"]);
+ok(C.hasCRM(CONTRIB), "FR-43 a Contributor still reaches the CRM");
 ok(!C.crmBootstrap(SIDDIQUE).canSetup, "FR-43 a Sales User cannot reach Setup");
 ok(C.crmBootstrap(VIKRAM).canSetup, "FR-43 an Administrator can reach Setup");
 refused(() => C.createLead(PLMONLY, { company: "X" }), "FR-43", "a user with no CRM role at all");
@@ -500,7 +612,7 @@ refused(() => C.dismissPrompt(SHIREEN, openPrompts[0].id, { reason: "Already pla
 /* ================= end-to-end (§11 rule 4) ================= */
 // copyMatrix above deliberately replaced every pipeline's matched stages, which is what FR-37 does.
 // Put the §9.8 defaults back so the walk below exercises the shipped configuration.
-for (const p of db.all("SELECT id FROM pipeline")) seedDefaultRequirements(p.id);
+for (const p of db.all("SELECT id FROM pipeline")) seedDefaultRequirements(p.id, true);
 const stxGateKeys = db.all(`SELECT r.field_key FROM stage_requirement r JOIN pipeline_stage s ON s.id=r.pipeline_stage_id
   WHERE s.is_gate=1 AND s.pipeline_id=(SELECT id FROM pipeline WHERE offering_id=? LIMIT 1)`, offId("STX"))
   .map(r => r.field_key);
@@ -511,11 +623,14 @@ const z = C.createLead(SIDDIQUE, { company: "Endtoend Trading LLC" });
 C.updateLead(SIDDIQUE, z.id, { offering: offId("STX"), industry: idOf("industry", "Trading and distribution") });
 const zStages = C.pipelineStages(C.getLead(z.id).pipeline_id);
 const zGate = zStages.find(s => s.is_gate).seq;
+refused(() => C.attemptMove(SIDDIQUE, z.id, { to_seq: 2 }), "BR-16",
+  "end-to-end: the first move needs the estimated annual order value");
+C.updateLead(SIDDIQUE, z.id, { value: 430000 });
 for (let s = 2; s < zGate; s++) C.attemptMove(SIDDIQUE, z.id, { to_seq: s });
 refused(() => C.attemptMove(SIDDIQUE, z.id, { to_seq: zGate }), "BR-16", "end-to-end: refused at the gate");
 const fills = [["customer", "Aisha Noor"], ["designation", "Director"], ["contact", "+971 4 000 0000"],
   ["email", "aisha@endtoend.example"], ["segment", idOf("customer_segment", "Trading & Distribution / Manufacturing")],
-  ["activity", "Stock accuracy review"], ["location", "Dubai"]];
+  ["location", "Dubai"]];
 for (const [k, v] of fills) {
   C.updateLead(SIDDIQUE, z.id, { [k]: v });
   refused(() => C.attemptMove(SIDDIQUE, z.id, { to_seq: zGate }), "BR-16", `end-to-end: still refused after filling ${k}`);
@@ -523,14 +638,21 @@ for (const [k, v] of fills) {
 C.updateLead(SIDDIQUE, z.id, { channel: idOf("channel", "Business Community") });
 C.attemptMove(SIDDIQUE, z.id, { to_seq: zGate });
 eq(C.getLead(z.id).stage_seq, zGate, "end-to-end: the gate is passed once the last field is recorded");
+eq(C.getLead(z.id).effective_source, "Offline",
+  "end-to-end: an Offline channel means Activity Name was never asked for");
 refused(() => C.attemptMove(SIDDIQUE, z.id, { to_seq: zGate + 2 }), "BR-21", "end-to-end: a skip is refused");
 refused(() => C.attemptMove(SIDDIQUE, z.id, { to_seq: zGate - 1 }), "BR-22", "end-to-end: a backward move with no reason is refused");
 C.markLost(SIDDIQUE, z.id, { reason: "Budget deferred to the next financial year." });
 eq(C.getLead(z.id).status, "Lost", "end-to-end: the lead is marked lost");
 C.reopenLead(SIDDIQUE, z.id, { reason: "Budget released earlier than expected." });
-for (let s = zGate + 1; s <= zStages.length; s++) C.attemptMove(SIDDIQUE, z.id, { to_seq: s });
+for (let s = zGate + 1; s < zStages.length; s++) C.attemptMove(SIDDIQUE, z.id, { to_seq: s });
+refused(() => C.attemptMove(SIDDIQUE, z.id, { to_seq: zStages.length }), "BR-16",
+  "end-to-end: the Closed band needs the Odoo invoice number", ["Odoo Invoice Number"]);
+C.updateLead(SIDDIQUE, z.id, { invoice_no: "INV/2026/00431" });
+C.attemptMove(SIDDIQUE, z.id, { to_seq: zStages.length });
 eq(C.getLead(z.id).stage_band, "Closed", "end-to-end: the lead reaches the Closed band");
 eq(C.getLead(z.id).status, "Won", "end-to-end: a lead at a Closed-band stage reports Won");
+eq(C.getLead(z.id).invoice_no, "INV/2026/00431", "end-to-end: the Odoo invoice number is on the record");
 const zHist = db.all("SELECT * FROM lead_stage_history WHERE lead_id=? ORDER BY id", z.id);
 eq(zHist.length, 1 + (zGate - 2) + 1 + 1 + 1 + (zStages.length - zGate),
   "end-to-end: every derivation, move, loss and reopen wrote exactly one history row");

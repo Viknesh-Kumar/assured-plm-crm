@@ -137,7 +137,9 @@ async function tStages() {
     <td class="r"><div class="btngroup">
       <button class="btn sm" data-up="${i}" ${i === 0 ? "disabled" : ""}>↑</button>
       <button class="btn sm" data-down="${i}" ${i === stages.length - 1 ? "disabled" : ""}>↓</button>
-      <button class="btn sm danger" data-del="${i}">Remove</button></div></td>
+      <button class="btn sm danger" data-del="${i}" ${s.lead_count
+        ? `disabled title="Holds ${s.lead_count} lead${s.lead_count > 1 ? "s" : ""} — move them to another stage first (BR-12)"` : ""
+      }>Remove</button></div></td>
   </tr>`).join("");
 
   const html = () => `
@@ -173,14 +175,28 @@ async function tStages() {
           readBack(); stages.splice(+b.dataset.del, 1); redraw();
         });
       };
-      document.getElementById("pipesel").onchange = e => { currentPipeline = +e.target.value; render(); };
+      let dirty = false;
+      document.getElementById("srows")?.addEventListener("input", () => { dirty = true; });
+      document.getElementById("pipesel").onchange = e => {
+        const next = +e.target.value;
+        const switchTo = () => { currentPipeline = next; render(); };
+        if (!dirty) return switchTo();
+        e.target.value = String(currentPipeline);            // hold the select until the question is answered
+        confirmAction({
+          title: "Discard unsaved stage edits?", danger: true, submit: "Discard and switch",
+          body: `The changes to “${esc(p.name)}” have not been saved. Switching pipeline loses them.`,
+          onConfirm: async () => switchTo()
+        });
+      };
       document.querySelector('[data-a="add"]').onclick = () => {
-        readBack(); stages.push({ id: null, name: "New stage", band: "Lead", is_gate: 0 }); redraw();
+        readBack(); stages.push({ id: null, name: "New stage", band: "Lead", is_gate: 0 }); dirty = true; redraw();
       };
       document.querySelector('[data-a="save"]').onclick = async () => {
         readBack();
-        try { await api(`/crm/pipelines/${p.id}/stages`, { method: "POST", body: { stages } }); await after("Stage list saved."); }
-        catch (e) { errToast(e); }
+        try {
+          await api(`/crm/pipelines/${p.id}/stages`, { method: "POST", body: { stages } });
+          dirty = false; await after("Stage list saved.");
+        } catch (e) { errToast(e); }
       };
       wire();
     }
@@ -218,19 +234,26 @@ async function tMatrix() {
         <td class="f">${esc(f.label)}${f.locked ? ` <span class="badge">locked</span>` : ""}</td>
         ${m.stages.map(s => cellFor(f, s)).join("")}</tr>`).join("")}</tbody>
     </table></div>
-    <p class="note" style="margin-top:.625rem">The seeded default is everything at the qualification gate plus
-      Location and Attributed Content at the first CSE stage — the answer to “a lead can be just a name, but later we
-      need the rest”. <i>Later</i> means <i>at the gate</i>.</p>`,
+    <p class="note" style="margin-top:.625rem">The seeded default is the Estimated Annual Order Value at stage two,
+      everything else at the qualification gate (Activity Name only when the Lead Source is Online), Location at the
+      first CSE stage, and the Odoo Invoice Number before the Closed band — the answer to “a lead can be just a name,
+      but later we need the rest”.</p>`,
     mount() {
       document.getElementById("pipesel").onchange = e => { currentPipeline = +e.target.value; render(); };
-      document.querySelectorAll("td.cell").forEach(td => td.onclick = async () => {
+      const wireCells = () => document.querySelectorAll("td.cell").forEach(td => td.onclick = async () => {
         const next = (Number(td.dataset.level) + 1) % 3;
         try {
-          await api("/crm/requirement", { method: "POST", body: {
+          const m2 = await api("/crm/requirement", { method: "POST", body: {
             pipeline_stage_id: Number(td.dataset.stage), field_key: td.dataset.field, level: next } });
-          await render();
+          // Repaint the grid only, so the scroll position and the column being worked on both survive.
+          m.own = m2.own;
+          document.querySelector("table.dt.matrix tbody").innerHTML = m2.fields.map(f => `<tr>
+            <td class="f">${esc(f.label)}${f.locked ? ` <span class="badge">locked</span>` : ""}</td>
+            ${m2.stages.map(st => cellFor(f, st)).join("")}</tr>`).join("");
+          wireCells();
         } catch (e) { errToast(e); }
       });
+      wireCells();
       document.querySelector('[data-a="copyall"]').onclick = () => confirmAction({
         title: "Copy this matrix to every other pipeline",
         body: "Stages are matched by band and by the qualification gate, never by stage number — a five-stage and an "
@@ -351,10 +374,18 @@ async function tReference() {
       document.querySelectorAll("[data-delref]").forEach(b => b.onclick = async () => {
         const [k, id] = b.dataset.delref.split(":");
         const row = lists[k].rows.find(r => r.id === +id);
+        if (row.uses) return confirmAction({
+          title: `Deactivate “${row.name}”`, submit: "Deactivate",
+          body: `${row.uses} record${row.uses > 1 ? "s" : ""} already carry this value, so it cannot be deleted (BR-35). `
+            + "Deactivating it stops it appearing on new records and leaves it visible on the existing ones.",
+          onConfirm: async () => {
+            await api(`/crm/reference/${k}`, { method: "POST", body: { ...row, id: Number(id), active: false } });
+            await after(`“${row.name}” deactivated.`);
+          }
+        });
         confirmAction({
           title: `Delete “${row.name}”`, danger: true, submit: "Delete",
-          body: row.uses ? `This value is used by ${row.uses} record(s). The server will refuse — deactivate it instead.`
-            : "It is not used by any record.",
+          body: "It is not used by any record, so it can be removed outright.",
           onConfirm: async () => { await api(`/crm/reference/${k}/${id}`, { method: "DELETE" }); await after("Value deleted."); }
         });
       });
@@ -408,8 +439,11 @@ async function tMovement() {
       <div class="field full"><label class="checkline"><input type="checkbox" name="allowBack" ${m.allowBack ? "checked" : ""}>
         <span><b>Allow backward movement</b><br><span class="help">On by default.</span></span></label></div>
       <div class="field full"><label class="checkline"><input type="checkbox" name="backReason" ${m.backReason ? "checked" : ""}>
-        <span><b>Require a reason on backward movement</b><br><span class="help">On by default. Minimum
-        ${m.reasonMin} characters (BR-22).</span></span></label></div>
+        <span><b>Require a reason on backward movement</b><br><span class="help">On by default.</span></span></label></div>
+      <div class="field"><label for="reasonMin">Minimum characters in a reason</label>
+        <input class="inp" id="reasonMin" name="reasonMin" type="number" min="1" max="500" value="${m.reasonMin}">
+        <div class="help">Applies to a backward move, a loss, a reopen, a Lead Source override and a dismissed
+          launch prompt (BR-22, BR-26, BR-28).</div></div>
     </div>
     <div style="display:flex;justify-content:flex-end"><button class="btn brand" type="submit">Save movement rules</button></div>
     </form>`,
@@ -419,7 +453,8 @@ async function tMovement() {
         const fd = new FormData(e.target);
         try {
           await api("/crm/movement", { method: "POST", body: {
-            allowSkip: fd.has("allowSkip"), allowBack: fd.has("allowBack"), backReason: fd.has("backReason") } });
+            allowSkip: fd.has("allowSkip"), allowBack: fd.has("allowBack"), backReason: fd.has("backReason"),
+            reasonMin: Number(fd.get("reasonMin")) } });
           await after("Movement rules saved.");
         } catch (err) { errToast(err); }
       };

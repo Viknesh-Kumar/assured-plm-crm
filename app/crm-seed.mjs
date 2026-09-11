@@ -3,9 +3,13 @@
 import { db, all, one, run, col, setSetting, getSetting } from "./db.mjs";
 import { hashPassword, today } from "./lib.mjs";
 
+// Split three ways so an administrator can say "only a few may move a lead between stages" and
+// "only select users may add a lead" without inventing a role for each combination.
 export const CRM_PERMISSIONS = [
-  ["crm.lead.manage", "Create and work leads"],
-  ["crm.content.manage", "Plan and publish content"],
+  ["crm.lead.create", "Add a new lead"],
+  ["crm.lead.manage", "Edit leads, attach content, mark lost or reopen"],
+  ["crm.lead.move", "Move a lead between pipeline stages"],
+  ["crm.content.manage", "Plan and publish content, and set publishing targets"],
   ["crm.setup.manage", "Configure pipelines, stages, requirements and CRM reference data"]
 ];
 
@@ -110,7 +114,7 @@ export const TEMPLATES = [
     ["CSE & Cost-Benefit Identification", C], ["Closure", X]]]
 ];
 
-/* §9.7 Lead field catalogue — 17 fields, 14 active. */
+/* §9.7 Lead field catalogue — 18 fields, 15 active. */
 const FIELDS = [
   ["company", "Name of the Company", "text", null, 1, 1, "The entry minimum — the only field mandatory at creation (BR-01)."],
   ["customer", "Customer Name", "text", null, 1, 0, null],
@@ -123,10 +127,15 @@ const FIELDS = [
   ["offering", "Offering", "list", "offering", 1, 1, "With Industry, derives the pipeline (BR-04)."],
   ["channel", "Channel", "list", "channel", 1, 0, "How the lead was reached. Derives Lead Source (BR-25)."],
   ["source", "Lead Source", "list", "source", 1, 0, "Derived from the channel's mode; overridable with a reason (BR-26)."],
-  ["activity", "Activity Name", "text", null, 1, 0, null],
-  ["content", "Attributed Content", "content", "content", 1, 0, "The primary attribution (BR-33)."],
+  ["value", "Estimated Annual Order Value (AED)", "number", null, 1, 0,
+    "What the account is worth in a year if it closes. Asked for as soon as the lead leaves the first stage."],
+  ["activity", "Activity Name", "content", "content", 1, 0,
+    "The content item the lead came from — picked from the Content Calendar, which also sets the primary attribution (BR-33). Only asked for when the Lead Source is Online."],
+  ["invoice_no", "Odoo Invoice Number", "text", null, 1, 0,
+    "The Odoo invoice raised for the deal. Required before the lead reaches the Closed band."],
   ["owner", "Owner", "list", "person", 1, 0, null],
-  ["value", "Estimated Value (AED)", "number", null, 0, 0, "Switched off — OI-07."],
+  ["content", "Attributed Content", "content", "content", 0, 0,
+    "Retired — Activity Name is now the content picker and carries the primary attribution. Values already recorded are kept."],
   ["btype", "Business Type", "text", null, 0, 0, "Switched off — undefined in the source (Finding 2)."],
   ["bsegment", "Business Segment", "text", null, 0, 0, "Switched off — undefined in the source (Finding 2)."]
 ];
@@ -135,10 +144,16 @@ const FIELDS = [
 const CONTENT_TYPES = ["Long-form", "Short-form", "Video", "Podcast", "Testimonial", "Demo video", "Case story"];
 const CONTENT_CHANNELS = [["LinkedIn", "#0A66C2"], ["Instagram", "#C13584"], ["YouTube", "#CC0000"], ["Podcast", "#5B4B8A"]];
 
-/* §9.8 Default requirement seeding */
+/* §9.8 Default requirement seeding. Level 1 = always; level 2 = only when the Lead Source is Online (BR-17). */
 export const GATE_REQUIREMENTS = ["customer", "designation", "contact", "email", "industry",
-  "segment", "offering", "channel", "source", "activity"];
-export const CSE_REQUIREMENTS = [["location", 1], ["content", 2]];
+  "segment", "offering", "channel", "source"];
+/** Asked for on the very first move, so a lead never travels without a number against it. */
+export const EARLY_REQUIREMENTS = [["value", 1]];
+/** Activity Name is level 2: an Offline channel derives an Offline Lead Source, and the field is then not asked for. */
+export const GATE_CONDITIONAL = [["activity", 2]];
+export const CSE_REQUIREMENTS = [["location", 1]];
+/** Nothing reaches the Closed band without the Odoo invoice against it. */
+export const CLOSURE_REQUIREMENTS = [["invoice_no", 1]];
 
 const CRM_SETTINGS = [
   ["crm_allow_skip", "0", "Allow a lead to skip stages (§5.5)", "bool"],
@@ -158,9 +173,13 @@ export function seedCRMIfEmpty() {
   try {
     run(`INSERT OR IGNORE INTO roles(name,description,permissions,is_system,sort) VALUES
       ('CRM Administrator','Full access to the CRM including Setup — pipelines, stages, requirement matrices and reference data.',
-       'crm.lead.manage,crm.content.manage,crm.setup.manage',1,10),
-      ('CRM Sales User','Works leads and plans content. No access to CRM Setup (FR-43).',
-       'crm.lead.manage,crm.content.manage',1,11)`);
+       'crm.lead.create,crm.lead.manage,crm.lead.move,crm.content.manage,crm.setup.manage',1,10),
+      ('CRM Sales User','Adds and works leads, moves them through the pipeline, and plans content. No access to CRM Setup (FR-43).',
+       'crm.lead.create,crm.lead.manage,crm.lead.move,crm.content.manage',1,11),
+      ('CRM Contributor','Works the leads already assigned to them but may neither add one nor move it between stages.',
+       'crm.lead.manage',1,12),
+      ('Content Planner','Plans and publishes content and sets publishing targets. No access to leads.',
+       'crm.content.manage',1,13)`);
     const roleId = n => col("SELECT id FROM roles WHERE name=?", n);
 
     // No people are seeded. The Product Head creates users and assigns CRM roles in Setup.
@@ -187,6 +206,7 @@ export function seedCRMIfEmpty() {
     }
 
     CRM_SETTINGS.forEach(([k, v, l, t]) => { if (getSetting(k) === null) setSetting(k, v, l, t); });
+    setSetting("crm_schema_rev", "2", "CRM reference-data revision applied to this database", "hidden");
 
     for (const [offCode, industries, tplCode, owner] of PIPELINES) {
       const off = one("SELECT * FROM offering WHERE code=?", offCode);
@@ -218,12 +238,60 @@ export function copyTemplateStages(pipelineId, templateId) {
       pipelineId, s.seq, s.name, s.band, s.is_gate);
 }
 
-/** §9.8 — requirements at the qualification gate and at the first CSE-band stage. */
-export function seedDefaultRequirements(pipelineId) {
-  const gate = one("SELECT * FROM pipeline_stage WHERE pipeline_id=? AND is_gate=1 ORDER BY seq LIMIT 1", pipelineId);
-  if (gate) GATE_REQUIREMENTS.forEach(k =>
-    run("INSERT OR IGNORE INTO stage_requirement(pipeline_stage_id,field_key,level) VALUES(?,?,1)", gate.id, k));
-  const cse = one("SELECT * FROM pipeline_stage WHERE pipeline_id=? AND band='CSE' ORDER BY seq LIMIT 1", pipelineId);
-  if (cse) CSE_REQUIREMENTS.forEach(([k, lvl]) =>
-    run("INSERT OR IGNORE INTO stage_requirement(pipeline_stage_id,field_key,level) VALUES(?,?,?)", cse.id, k, lvl));
+/** §9.8 — requirements at the second stage, the qualification gate, the first CSE stage and the Closed band. */
+export function seedDefaultRequirements(pipelineId, replace = false) {
+  const put = (stageId, key, level) => run(
+    `INSERT INTO stage_requirement(pipeline_stage_id,field_key,level) VALUES(?,?,?)
+     ON CONFLICT(pipeline_stage_id,field_key) DO UPDATE SET level=${replace ? "excluded.level" : "level"}`,
+    stageId, key, level);
+  const stageAt = sql => one(`SELECT * FROM pipeline_stage WHERE pipeline_id=? ${sql}`, pipelineId);
+
+  const second = stageAt("AND seq=2");
+  if (second) EARLY_REQUIREMENTS.forEach(([k, l]) => put(second.id, k, l));
+  const gate = stageAt("AND is_gate=1 ORDER BY seq LIMIT 1");
+  if (gate) {
+    GATE_REQUIREMENTS.forEach(k => put(gate.id, k, 1));
+    GATE_CONDITIONAL.forEach(([k, l]) => put(gate.id, k, l));
+  }
+  const cse = stageAt("AND band='CSE' ORDER BY seq LIMIT 1");
+  if (cse) CSE_REQUIREMENTS.forEach(([k, l]) => put(cse.id, k, l));
+  const closed = stageAt("AND band='Closed' ORDER BY seq LIMIT 1");
+  if (closed) CLOSURE_REQUIREMENTS.forEach(([k, l]) => put(closed.id, k, l));
+}
+
+/**
+ * Brings a database seeded by an earlier release up to the current field catalogue and default
+ * requirements. Idempotent and guarded by a revision number, so it costs one settings read per boot.
+ */
+export function migrateCRM() {
+  const REV = 2;
+  if (Number(getSetting("crm_schema_rev", "1")) >= REV) return false;
+
+  db.exec("BEGIN");
+  try {
+    // The field catalogue is authoritative: re-assert label, type, list source and active flag.
+    FIELDS.forEach(([key, label, type, list, active, locked, help], i) => {
+      if (col("SELECT id FROM lead_field WHERE key=?", key))
+        run("UPDATE lead_field SET label=?, type=?, list_source=?, active=?, sort=?, help=? WHERE key=?",
+          label, type, list, active, i, help, key);
+      else
+        run(`INSERT INTO lead_field(key,label,type,list_source,active,locked,sort,help,custom)
+             VALUES(?,?,?,?,?,?,?,?,0)`, key, label, type, list, active, locked, i, help);
+    });
+    // Attributed Content is retired into Activity Name; its requirements go with it.
+    run("DELETE FROM stage_requirement WHERE field_key='content'");
+    // Re-assert the defaults on every pipeline, overwriting levels this release has changed.
+    all("SELECT id FROM pipeline").forEach(p => seedDefaultRequirements(p.id, true));
+    // crm.lead.manage used to mean all three; keep every existing role's users working exactly as before.
+    for (const r of all("SELECT id, permissions FROM roles")) {
+      const perms = String(r.permissions || "").split(",").map(s => s.trim()).filter(Boolean);
+      if (!perms.includes("crm.lead.manage")) continue;
+      const add = ["crm.lead.create", "crm.lead.move"].filter(p => !perms.includes(p));
+      if (add.length) run("UPDATE roles SET permissions=? WHERE id=?", [...perms, ...add].join(","), r.id);
+    }
+    setSetting("crm_schema_rev", String(REV), "CRM reference-data revision applied to this database", "hidden");
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  console.log("  CRM reference data migrated to revision " + REV + ".");
+  return true;
 }

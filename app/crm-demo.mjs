@@ -78,55 +78,54 @@ const CONTENT = [
 ];
 
 const LEADS = [
-  { company: "Gulf Metals Trading LLC", customer: "Rashid Al Mansoori", designation: "Managing Director", location: "Dubai",
+  { company: "Gulf Metals Trading LLC", value: 420000, customer: "Rashid Al Mansoori", designation: "Managing Director", location: "Dubai",
     contact: "+971 50 xxx 1180", email: "rashid@gulfmetals.ae", industry: "i1", segment: "s4", offering: "o1",
-    channel: "c5", activity: "Dubai Business Council — Aug meet", owner: "p3", created: "2026-07-14", seq: 5 },
-  { company: "Emirates Precision Industries", customer: "Sunil Nair", designation: "CEO", location: "Sharjah",
+    channel: "c5", owner: "p3", created: "2026-07-14", seq: 5 },
+  { company: "Emirates Precision Industries", value: 260000, customer: "Sunil Nair", designation: "CEO", location: "Sharjah",
     contact: "+971 55 xxx 4402", email: "sunil@epi.ae", industry: "i2", segment: "s4", offering: "o2",
-    channel: "c5", activity: "Community grilling session 12", owner: "p3", created: "2026-07-02", seq: 6 },
-  { company: "Meridian Contracting", customer: "Fatima Haddad", designation: "Director — Projects", location: "Abu Dhabi",
+    channel: "c5", owner: "p3", created: "2026-07-02", seq: 6 },
+  { company: "Meridian Contracting", value: 880000, customer: "Fatima Haddad", designation: "Director — Projects", location: "Abu Dhabi",
     contact: "+971 52 xxx 7719", email: "f.haddad@meridian.ae", industry: "i4", segment: "s3", offering: "o4",
-    channel: "c9", activity: "LinkedIn — win probability series", content: "Win probability",
+    channel: "c9", content: "Win probability",
     touches: ["Project sales is"], owner: "p1", created: "2026-08-06", seq: 3 },
-  { company: "Northline Projects", customer: "Arun Menon", designation: "CFO", location: "Dubai",
+  { company: "Northline Projects", value: 310000, customer: "Arun Menon", designation: "CFO", location: "Dubai",
     contact: "+971 50 xxx 2231", email: "arun@northline.ae", industry: "i4", segment: "s3", offering: "o5",
-    channel: "c4", activity: "Walk-in — Business Bay", owner: "p1", created: "2026-06-22", seq: 4,
+    channel: "c4", owner: "p1", created: "2026-06-22", seq: 4,
     lost: "Budget deferred to the next financial year; asked to be re-approached in Q1.", lostAt: "2026-08-20", lostBy: "p1" },
-  { company: "Cavendish Real Estate Dev.", customer: "Omar Sheikh", designation: "Group CFO", location: "Dubai",
+  { company: "Cavendish Real Estate Dev.", value: 540000, customer: "Omar Sheikh", designation: "Group CFO", location: "Dubai",
     contact: "+971 56 xxx 8890", email: "omar@cavendish.ae", industry: "i5", segment: "s7", offering: "o6",
-    channel: "c11", activity: "LinkedIn — cash flow visibility", content: "Cash flow visibility",
+    channel: "c11", content: "Cash flow visibility",
     owner: "p4", created: "2026-08-17", seq: 2 },
-  { company: "Al Fahad Logistics", customer: "Bilal Qureshi", designation: "Operations Head", location: "Jebel Ali",
+  { company: "Al Fahad Logistics", value: 195000, customer: "Bilal Qureshi", designation: "Operations Head", location: "Jebel Ali",
     contact: "+971 54 xxx 3312", email: "bilal@alfahad.ae", industry: "i6", segment: "s9", offering: "o7",
-    channel: "c10", activity: "LinkedIn — 22% fewer trips", content: "Client story — 22%",
+    channel: "c10", content: "Client story — 22%",
     touches: ["RouteX demo"], owner: "p2", created: "2026-08-14", seq: 4 },
-  { company: "Sterling Facilities Group", customer: "Nadia Rahman", designation: "VP Operations", location: "Dubai",
+  { company: "Sterling Facilities Group", value: 720000, customer: "Nadia Rahman", designation: "VP Operations", location: "Dubai",
     contact: "+971 50 xxx 6654", email: "nadia@sterlingfg.ae", industry: "i3", segment: "s5", offering: "o3",
-    channel: "c7", activity: "GCC Ops Leaders Forum — July", owner: "p4", created: "2026-07-09", seq: 5 },
-  { company: "Hexafab Manufacturing", customer: "Kiran Deshpande", designation: "Plant Head", location: "Ajman",
+    channel: "c7", owner: "p4", created: "2026-07-09", seq: 5 },
+  { company: "Hexafab Manufacturing", value: 150000, customer: "Kiran Deshpande", designation: "Plant Head", location: "Ajman",
     contact: "+971 55 xxx 1109", email: "kiran@hexafab.ae", industry: "i2", segment: "s4", offering: "o11",
-    channel: "c5", activity: "Business Community — Ajman chapter", owner: "p2", created: "2026-08-04", seq: 3 },
-  { company: "Vantage Interiors", industry: "i4", offering: "o8", created: "2026-08-26", seq: 2 },
-  { company: "Zenith Steel Traders", customer: "Prakash Iyer", industry: "i1", segment: "s9", offering: "o9",
-    channel: "c5", activity: "Business Community — Deira", owner: "p2", created: "2026-08-21", seq: 3 },
-  { company: "Orbit Modular Systems", customer: "Hala Nasser", designation: "Head of Supply Chain",
+    channel: "c5", owner: "p2", created: "2026-08-04", seq: 3 },
+  { company: "Vantage Interiors", value: 90000, industry: "i4", offering: "o8", created: "2026-08-26", seq: 2 },
+  { company: "Zenith Steel Traders", value: 210000, customer: "Prakash Iyer", industry: "i1", segment: "s9", offering: "o9",
+    channel: "c5", owner: "p2", created: "2026-08-21", seq: 3 },
+  { company: "Orbit Modular Systems", value: 365000, customer: "Hala Nasser", designation: "Head of Supply Chain",
     location: "Dubai Investment Park", contact: "+971 52 xxx 4470", email: "hala@orbitmod.ae", industry: "i2",
-    segment: "s9", offering: "o10", channel: "c5", activity: "Business Community — DIP", owner: "p2",
+    segment: "s9", offering: "o10", channel: "c5", owner: "p2",
     created: "2026-07-28", seq: 5 },
-  { company: "Continental Labour Services", industry: "i7", offering: "o8", channel: "c4",
-    activity: "Walk-in — Al Quoz", customer: "Imran Sethi", owner: "p2", created: "2026-08-18", seq: 2 },
-  { company: "Pinnacle Advisory Partners", customer: "Sarah Whitfield", designation: "Partner", location: "DIFC",
+  { company: "Continental Labour Services", value: 120000, industry: "i7", offering: "o8", channel: "c4", customer: "Imran Sethi", owner: "p2", created: "2026-08-18", seq: 2 },
+  { company: "Pinnacle Advisory Partners", value: 640000, customer: "Sarah Whitfield", designation: "Partner", location: "DIFC",
     contact: "+971 50 xxx 9021", email: "s.whitfield@pinnacle.ae", industry: "i3", segment: "s6", offering: "o3",
-    channel: "c11", activity: "LinkedIn — delegation series", content: "Delegation is a",
+    channel: "c11", content: "Delegation is a",
     owner: "p4", created: "2026-08-27", seq: 2 },
-  { company: "Riyadh Growth Holdings", industry: "i3", offering: "o3", created: "2026-08-28", seq: 3 },
-  { company: "Al Noor Distribution", customer: "Yousef Kamal", designation: "Owner", location: "Sharjah",
+  { company: "Riyadh Growth Holdings", value: 480000, industry: "i3", offering: "o3", created: "2026-08-28", seq: 3 },
+  { company: "Al Noor Distribution", value: 175000, customer: "Yousef Kamal", designation: "Owner", location: "Sharjah",
     contact: "+971 55 xxx 2278", email: "yousef@alnoordist.ae", industry: "i1", segment: "s4", offering: "o1",
-    channel: "c12", activity: "LinkedIn — scaling without overhead", content: "Scaling without",
+    channel: "c12", content: "Scaling without",
     owner: "p3", created: "2026-08-24", seq: 3 },
-  { company: "Delta Fabrication WLL", customer: "Mohammed Basheer", designation: "General Manager",
+  { company: "Delta Fabrication WLL", value: 285000, customer: "Mohammed Basheer", designation: "General Manager",
     location: "Umm Al Quwain", contact: "+971 50 xxx 5540", email: "m.basheer@deltafab.ae", industry: "i2",
-    segment: "s4", offering: "o2", channel: "c5", activity: "Business Community — UAQ", owner: "p3",
+    segment: "s4", offering: "o2", channel: "c5", owner: "p3",
     created: "2026-05-19", seq: 6,
     lost: "Awarded to an incumbent advisor already embedded with the group finance team.", lostAt: "2026-08-11", lostBy: "p3" }
 ];
@@ -155,15 +154,18 @@ try {
     const stage = pipe ? one("SELECT * FROM pipeline_stage WHERE pipeline_id=? AND seq=?", pipe.id, L.seq || 1) : null;
     const source = L.channel ? col("SELECT mode FROM channel WHERE id=?", chn(L.channel)) : null;
     const owner = L.owner ? per(L.owner) : null;
+// Activity Name is the title of the content the lead came from, so it is derived here rather than typed.
+    const primaryTitle = L.content ? col("SELECT title FROM content WHERE id=?", contentId(L.content)) : null;
     run(`INSERT INTO lead(company,pipeline_id,stage_id,stage_entered_at,owner_id,offering_id,industry_id,segment_id,
-           channel_id,source,customer,designation,location,contact,email,activity,
+           channel_id,source,customer,designation,location,contact,email,activity,est_annual_value,invoice_no,
            lost,lost_reason,lost_at,lost_stage_id,created_at,created_by,updated_at)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
+         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))`,
       L.company, pipe?.id ?? null, stage?.id ?? null, L.created, owner,
       L.offering ? off(L.offering) : null, L.industry ? ind(L.industry) : null,
       L.segment ? seg(L.segment) : null, L.channel ? chn(L.channel) : null, source,
       L.customer ?? null, L.designation ?? null, L.location ?? null, L.contact ?? null, L.email ?? null,
-      L.activity ?? null, L.lost ? 1 : 0, L.lost ?? null, L.lostAt ?? null, L.lost ? stage?.id ?? null : null,
+      primaryTitle, L.value ?? null, stage?.band === "Closed" ? `INV/2026/${String(1400 + LEADS.indexOf(L))}` : null,
+      L.lost ? 1 : 0, L.lost ?? null, L.lostAt ?? null, L.lost ? stage?.id ?? null : null,
       L.created, owner);
     const id = col("SELECT MAX(id) FROM lead");
 
@@ -185,6 +187,25 @@ try {
   }
   db.exec("COMMIT");
 } catch (e) { db.exec("ROLLBACK"); throw e; }
+
+// Published items carry a plausible engagement figure so the new column and CRM-10 are not blank.
+const METRIC = ["Impressions", "Views", "Likes"];
+all("SELECT id, title FROM content WHERE status='Published' ORDER BY id").forEach((c, i) =>
+  run("UPDATE content SET engagement_metric=?, engagement_value=? WHERE id=?",
+    METRIC[i % 3], 1200 + (i * 1637) % 14000, c.id));
+
+// One publishing target per person and channel in the demo month, so the target board has rows.
+for (const [pcode, chName, typeName, target] of [
+  ["p1", "LinkedIn", "Long-form", 4], ["p2", "LinkedIn", "Short-form", 6],
+  ["p3", "LinkedIn", "Case story", 2], ["p4", "Instagram", "Short-form", 8]
+]) {
+  const personId = per(pcode), chId = col("SELECT id FROM content_channel WHERE name=?", chName);
+  const tyId = col("SELECT id FROM content_type WHERE name=?", typeName);
+  if (!personId || !chId || !tyId) continue;
+  run(`INSERT OR IGNORE INTO content_target(period,channel_id,type_id,person_id,target,note,created_at,created_by)
+       VALUES('2026-08',?,?,?,?,'Illustrative target loaded with the demo data',datetime('now'),?)`,
+    chId, tyId, personId, target, personId);
+}
 
 console.log(`\n  Demo data loaded: ${col("SELECT COUNT(*) FROM lead")} leads (` +
   `${col("SELECT COUNT(*) FROM lead WHERE lost=1")} lost), ${col("SELECT COUNT(*) FROM content")} content items, ` +

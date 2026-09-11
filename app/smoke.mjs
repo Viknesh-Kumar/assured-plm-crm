@@ -57,6 +57,17 @@ ok(boot.stages.length === 14, "the 14-stage model is configured");
 ok(boot.roles.length >= 9, "the nine base roles are configured");
 
 console.log("\n  — the Product Head configures users and roles —");
+// The one change the access screen must never allow: leaving nobody able to open it again. Only
+// testable while the Product Head is genuinely the only administrator, i.e. on a clean install.
+if (FRESH) {
+  await refused(await ph.call(`/users/${boot.user.id}`, "PATCH",
+    { name: boot.user.name, email: boot.user.email, role_ids: [], permissions: [] }),
+    "the last administrator cannot drop their own access to user management", "nobody able to manage users");
+  ok((await ph.call("/users")).status === 200, "and they still have it");
+} else {
+  skip("last-administrator lockout guard - this deployment already has other administrators");
+}
+
 const roleId = n => boot.roles.find(r => r.name === n).id;
 const people = [
   ["Chief Executive", `ceo.${RUN}@a.local`, "CEO"], ["Business Head", `bh.${RUN}@a.local`, "Business Head"],
@@ -197,14 +208,80 @@ const ind = crm.industries.find(i => i.name === "Warehousing").id;
 await ML.call(`/crm/leads/${lead.id}`, "PATCH", { offering: off, industry: ind });
 const withPipe = (await ML.call(`/crm/leads/${lead.id}`)).data.lead;
 eq(withPipe.pipeline_name, "RouteX", "BR-04 offering × industry derives the pipeline");
+
+// The very first move asks for the estimated annual order value and nothing else.
+const firstMove = await ML.call(`/crm/leads/${lead.id}/move`, "POST", { to_seq: 2 });
+ok(firstMove.status === 400 && (firstMove.data.missing || []).some(m => m.key === "value"),
+  "the first move asks for the estimated annual order value");
+await ML.call(`/crm/leads/${lead.id}`, "PATCH", { value: 250000 });
+eq((await ML.call(`/crm/leads/${lead.id}`)).data.lead.est_annual_value, 250000,
+  "the estimated annual order value is stored on the lead");
+
 const gateSeq = (await ML.call(`/crm/leads/${lead.id}`)).data.stages.find(s => s.is_gate).seq;
 for (let s = 2; s < gateSeq; s++) await ML.call(`/crm/leads/${lead.id}/move`, "POST", { to_seq: s });
 const refusal = await ML.call(`/crm/leads/${lead.id}/move`, "POST", { to_seq: gateSeq });
-ok(refusal.status === 400 && (refusal.data.missing || []).length === 7,
-  `BR-16 the gate refusal names all seven outstanding fields (${(refusal.data.missing || []).map(m => m.label).join(", ")})`);
+ok(refusal.status === 400 && (refusal.data.missing || []).length === 6,
+  `BR-16 the gate refusal names all six outstanding fields (${(refusal.data.missing || []).map(m => m.label).join(", ")})`);
+ok(!(refusal.data.missing || []).some(m => m.key === "activity"),
+  "BR-17 Activity Name is not asked for while the Lead Source is unknown");
+
+// Content: engagement, the Activity Name picker, and a publishing target.
+const crmRef = (await ph.call("/crm/bootstrap")).data;
+const liId = crmRef.contentChannels.find(c => c.name === "LinkedIn").id;
+const ctId = crmRef.contentTypes[0].id;
+const meId = (await ph.call("/bootstrap")).data.user.id;
+const today = new Date().toISOString().slice(0, 10);
+await refused(await ph.call("/crm/content", "POST",
+  { date: today, title: `No unit ${RUN}`, type_id: ctId, channel_id: liId, person_id: meId, engagement_value: 10 }),
+  "BR-38 an engagement number with no unit is refused", "unit");
+const post = (await ph.call("/crm/content", "POST", { date: today, title: `Racking teardown ${RUN}`,
+  type_id: ctId, channel_id: liId, person_id: meId, status: "Published",
+  engagement_metric: "Impressions", engagement_value: 12400 })).data;
+eq(post.engagement_value, 12400, "BR-38 engagement is recorded as a number with its unit");
+eq(post.engagement_metric, "Impressions", "BR-38 the engagement unit is one of Views, Likes, Impressions");
+
+await ML.call(`/crm/leads/${lead.id}`, "PATCH", { activity: post.id });
+const withAct = (await ML.call(`/crm/leads/${lead.id}`)).data.lead;
+eq(withAct.activity, post.title, "the Activity Name is the content title, chosen from the calendar");
+eq(withAct.primary_content_id, post.id, "BR-33 the Activity Name carries the primary attribution");
+eq(withAct.activity_channel_name, "LinkedIn", "the social channel comes with the chosen post");
+
+const period = today.slice(0, 7);
+const targets = (await ph.call("/crm/targets", "POST",
+  { period, channel_id: liId, type_id: ctId, person_id: meId, target: 4 })).data;
+const myTarget = targets.find(t => t.period === period);
+eq(myTarget.target, 4, "BR-39 a publishing target is set for a month, channel, type and person");
+ok(myTarget.published >= 1, "BR-39 achievement is counted from the published content");
+await refused(await ph.call("/crm/targets", "POST",
+  { period, channel_id: liId, type_id: ctId, person_id: meId, target: 9 }),
+  "BR-39 a second target for the same quadruple is refused", "already set");
+await ph.call(`/crm/targets/${myTarget.id}`, "DELETE");
+ok(!((await ph.call(`/crm/targets?period=${period}`)).data.some(t => t.id === myTarget.id)),
+  "BR-39 a target can be removed");
 await refused(await ML.call("/crm/pipelines", "POST", { name: "x", offering_id: off, template_id: 1, industry_ids: [ind] }),
   "FR-43 a Sales User is refused CRM Setup", "crm.setup.manage");
 ok((await ph.call("/crm/pipelines")).data.length >= 12, "the Product Head can reach CRM Setup");
+
+console.log("\n  — users and access —");
+// A user with no role at all, given exactly two permissions directly.
+const gr = (await ph.call("/users", "POST", { name: `Granted ${RUN}`, email: `granted.${RUN}@assured.local`,
+  password: PW, role_ids: [], permissions: ["crm.lead.create", "crm.lead.manage"] })).data;
+const granted = gr.find(u => u.email === `granted.${RUN}@assured.local`);
+eq(granted.role_ids.length, 0, "a user may hold no role at all");
+eq(granted.direct.sort().join(","), "crm.lead.create,crm.lead.manage",
+  "access granted directly to one person is recorded as such");
+const GR = new Session("granted"); await GR.login(granted.email);
+const grLead = (await GR.call("/crm/leads", "POST", { company: `Granted Holdings ${RUN}` })).data;
+ok(grLead.id > 0, "a directly-granted user can add a lead");
+await refused(await GR.call(`/crm/leads/${grLead.id}/move`, "POST", { to_seq: 2 }),
+  "FR-43 the same user cannot move a lead between stages", "Move a lead between pipeline stages");
+await ph.call(`/users/${granted.id}`, "PATCH", { name: granted.name, email: granted.email,
+  role_ids: [], permissions: ["crm.lead.create", "crm.lead.manage", "crm.lead.move"] });
+const GR2 = new Session("granted"); await GR2.login(granted.email);
+await GR2.call(`/crm/leads/${grLead.id}`, "PATCH", { offering: off, industry: ind, value: 75000 });
+eq((await GR2.call(`/crm/leads/${grLead.id}/move`, "POST", { to_seq: 2 })).status, 200,
+  "granting the move permission directly lets the same user move the lead");
+
 
 console.log("\n  — reports —");
 for (const r of (await ph.call("/reports")).data) {

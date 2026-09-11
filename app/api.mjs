@@ -1,5 +1,5 @@
 // API handlers. Every business rule in BRD §11 is enforced here, not in the browser.
-import { db, all, one, run, col, getSetting, setSetting, audit, notify } from "./db.mjs";
+import { db, all, one, run, col, getSetting, setSetting, audit, notify, tx } from "./db.mjs";
 import { PERMISSIONS, ROUTE_ENTRY } from "./seed.mjs";
 import { workingDays, addWorkingDays, today, iso, quarterOf, median, toCSV, hashPassword, verifyPassword, HttpError } from "./lib.mjs";
 import { raiseSeedingPrompt } from "./crm.mjs";
@@ -19,11 +19,18 @@ export function loadUser(id) {
                  ORDER BY r.sort, r.name`, id);
   u.roleIds = u.roles.map(r => r.id);
   u.roleNames = u.roles.map(r => r.name);
-  u.permissions = [...new Set(u.roles.flatMap(r => (r.permissions || "").split(",").filter(Boolean)))];
+  u.rolePermissions = [...new Set(u.roles.flatMap(r => (r.permissions || "").split(",").filter(Boolean)))];
+  // Access is the union of the roles held and anything granted to this person directly (FR-43).
+  u.directPermissions = all("SELECT permission FROM user_permission WHERE user_id=?", id)
+    .map(r => r.permission).filter(p => !u.rolePermissions.includes(p));
+  u.permissions = [...new Set([...u.rolePermissions, ...u.directPermissions])];
   return u;
 }
 const can = (u, perm) => u.permissions.includes(perm);
-const need = (u, perm) => { if (!can(u, perm)) denied(`Your roles (${u.roleNames.join(", ") || "none"}) do not carry "${perm}".`); };
+const permLabel = perm => (PERMISSIONS.find(([k]) => k === perm) || [, perm])[1];
+const need = (u, perm) => { if (!can(u, perm)) denied(
+  `You do not have access to: ${permLabel(perm)} (${perm}). Your roles are ${u.roleNames.join(", ") || "none"}. `
+  + `An administrator can grant it in Setup → Users, either through a role or directly to you.`, "FR-43"); };
 const holdsRole = (u, roleId) => roleId != null && u.roleIds.includes(roleId);
 
 const cfg = (k, d) => getSetting(k, d);
@@ -102,7 +109,8 @@ export const usersWithPermission = perm => {
   const roleIds = all("SELECT id, permissions FROM roles")
     .filter(r => String(r.permissions || "").split(",").map(s => s.trim()).includes(perm))
     .map(r => r.id);
-  return [...new Set(roleIds.flatMap(usersInRole))];
+  const direct = all("SELECT user_id FROM user_permission WHERE permission=?", perm).map(r => r.user_id);
+  return [...new Set([...roleIds.flatMap(usersInRole), ...direct])];
 };
 
 function openHistory(pid, stageId, track, from, actor, note) {
@@ -135,7 +143,8 @@ export function bootstrap(user) {
     roles: all("SELECT * FROM roles ORDER BY sort, name"),
     users: all(`SELECT u.id, u.name, u.email, u.title, u.active,
                  (SELECT GROUP_CONCAT(r.name, ', ') FROM user_roles ur JOIN roles r ON r.id = ur.role_id
-                    WHERE ur.user_id = u.id) AS roles
+                    WHERE ur.user_id = u.id) AS roles,
+                 (SELECT GROUP_CONCAT(role_id) FROM user_roles WHERE user_id = u.id) AS role_ids
                 FROM users u ORDER BY u.active DESC, u.name`),
     settings: Object.fromEntries(all("SELECT key,value FROM settings WHERE key<>'app_secret'").map(r => [r.key, r.value])),
     settingsMeta: all("SELECT key,value,label,kind FROM settings WHERE key<>'app_secret' ORDER BY key"),
@@ -488,6 +497,23 @@ export const deleteEffort = (user, id, eid) => {
   return getProduct(id);
 };
 
+/** A deployment recorded in error can be removed while it is still unconfirmed (mirrors deleteEffort). */
+export const deleteDeployment = (user, id, did) => {
+  need(user, "deployment.record");
+  const d = one("SELECT * FROM deployments WHERE id=? AND product_id=?", did, id) || missing("Deployment not found.");
+  if (d.confirmed) bad("Confirmed revenue cannot be removed. Ask Finance to unconfirm it first.", "BR-24");
+  if (d.created_by !== user.id && !can(user, "settings.manage"))
+    denied("You may only remove a deployment you recorded.");
+  const p = mustProduct(id);
+  const remaining = col("SELECT COUNT(*) FROM deployments WHERE product_id=? AND id<>?", id, did);
+  if (!remaining && p.track === "market")
+    bad(`${p.code} entered the market on this deployment. Removing it would leave the product in a market `
+      + "state with nothing behind it, so it is refused (BR-11).", "BR-11");
+  run("DELETE FROM deployments WHERE id=?", did);
+  audit("product", id, "deployment", `Deployment "${d.client_ref}" removed`, user.id);
+  return getProduct(id);
+};
+
 export function recordDeployment(user, id, b) {
   need(user, "deployment.record");
   const p = mustProduct(id);
@@ -537,6 +563,10 @@ export function park(user, id, b) {
     b.resume_date, b.reason.trim(), id);
   audit("product", id, "status", `${p.code} parked until ${b.resume_date}`, user.id, "status", p.status, "On Hold");
   notify([p.owner_user_id, p.action_owner_user_id], id, "status", `${p.code} was parked until ${b.resume_date}.`);
+  // Parking clears submitted_at above, so anyone waiting on that decision is told it has gone away.
+  if (p.submitted_at)
+    notify(usersInRole(p.approver_role_id), id, "gate",
+      `${p.code} was parked until ${b.resume_date}; its "${p.stage_name}" submission has been withdrawn.`);
   return getProduct(id);
 }
 export function resume(user, id) {
@@ -893,9 +923,19 @@ export const reportCSV = key => { const r = report(key); return toCSV(r.columns,
 /* ------------------------------------------------------------------ */
 export function listUsers(user) {
   need(user, "users.manage");
+  const roles = Object.fromEntries(all("SELECT id, name, permissions FROM roles").map(r => [r.id, r]));
   return all(`SELECT u.*, (SELECT GROUP_CONCAT(role_id) FROM user_roles WHERE user_id=u.id) role_ids
               FROM users u ORDER BY u.active DESC, u.name`)
-    .map(u => ({ ...u, password_hash: undefined, role_ids: (u.role_ids || "").split(",").filter(Boolean).map(Number) }));
+    .map(u => {
+      const role_ids = (u.role_ids || "").split(",").filter(Boolean).map(Number);
+      const from_roles = [...new Set(role_ids.flatMap(id => (roles[id]?.permissions || "").split(",").filter(Boolean)))];
+      const direct = all("SELECT permission FROM user_permission WHERE user_id=?", u.id)
+        .map(r => r.permission).filter(p => !from_roles.includes(p));
+      return { ...u, password_hash: undefined, role_ids, from_roles, direct,
+        permissions: [...new Set([...from_roles, ...direct])],
+        approves: all("SELECT seq FROM stages WHERE track='development' AND approver_role_id IN "
+          + `(SELECT role_id FROM user_roles WHERE user_id=?) ORDER BY seq`, u.id).map(r => r.seq) };
+    });
 }
 
 export function saveUser(user, id, b) {
@@ -903,6 +943,11 @@ export function saveUser(user, id, b) {
   const email = String(b.email || "").trim().toLowerCase();
   if (!b.name || !email) bad("Name and email are required.");
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) bad("That is not a valid email address.");
+  tx(() => writeUser(user, id, b, email));
+  return listUsers(user);
+}
+
+function writeUser(user, id, b, email) {
   if (id) {
     const ex = one("SELECT * FROM users WHERE id=?", id) || missing("User not found.");
     if (col("SELECT id FROM users WHERE email=? AND id<>?", email, id)) bad("Another user already has that email.");
@@ -931,7 +976,36 @@ export function saveUser(user, id, b) {
       audit("user", id, "roles", `Roles set to ${all("SELECT r.name FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=?", id).map(r => r.name).join(", ") || "none"}`,
         user.id, "roles", before.join(","), after.join(","));
   }
-  return listUsers(user);
+
+  // Extra access granted to this person alone, over and above their roles. Anything a role already
+  // grants is dropped rather than stored twice, so removing a role really does remove the access.
+  if (Array.isArray(b.permissions)) {
+    const fromRoles = new Set(all(`SELECT r.permissions FROM user_roles ur JOIN roles r ON r.id=ur.role_id
+                                   WHERE ur.user_id=?`, id).flatMap(r => (r.permissions || "").split(",").filter(Boolean)));
+    const wanted = [...new Set(b.permissions.map(p => String(p).trim()))]
+      .filter(p => PERMISSIONS.some(([k]) => k === p) && !fromRoles.has(p));
+    const before = all("SELECT permission FROM user_permission WHERE user_id=?", id).map(r => r.permission).sort();
+    run("DELETE FROM user_permission WHERE user_id=?", id);
+    wanted.forEach(p => run(`INSERT OR IGNORE INTO user_permission(user_id,permission,granted_by,granted_at)
+                             VALUES(?,?,?,datetime('now'))`, id, p, user.id));
+    if (String(before) !== String([...wanted].sort()))
+      audit("user", id, "access", `Direct access set to ${wanted.join(", ") || "none — roles only"}`,
+        user.id, "permissions", before.join(","), wanted.join(","));
+  }
+  assertAdminRemains();
+}
+
+/**
+ * The one change this screen must never be allowed to make: leaving nobody able to open it again.
+ * Checked after the write and rolled back by throwing, because the union of roles and direct grants
+ * is easier to evaluate from the stored state than to predict from the request.
+ */
+function assertAdminRemains() {
+  const admins = usersWithPermission("users.manage")
+    .filter(uid => col("SELECT active FROM users WHERE id=?", uid));
+  if (admins.length) return;
+  throw new HttpError(400, "That change would leave nobody able to manage users, and Setup could not be "
+    + "opened again. Give the permission to another active account first.", "NFR-06");
 }
 
 export function resetPassword(user, id, b) {
@@ -956,17 +1030,20 @@ export function saveRole(user, id, b) {
   const perms = (Array.isArray(b.permissions) ? b.permissions : String(b.permissions || "").split(","))
     .map(s => String(s).trim()).filter(p => PERMISSIONS.some(([k]) => k === p));
   if (!b.name) bad("A role name is required.");
-  if (id) {
-    const ex = one("SELECT * FROM roles WHERE id=?", id) || missing("Role not found.");
-    run("UPDATE roles SET name=?, description=?, permissions=? WHERE id=?",
-      ex.is_system ? ex.name : b.name.trim(), b.description || null, perms.join(","), id);
-    audit("role", id, "update", `Role ${ex.name} updated`, user.id, "permissions", ex.permissions, perms.join(","));
-  } else {
-    if (col("SELECT id FROM roles WHERE name=?", b.name.trim())) bad("A role with that name already exists.");
-    run("INSERT INTO roles(name,description,permissions,is_system,sort) VALUES(?,?,?,0,(SELECT COALESCE(MAX(sort),0)+1 FROM roles))",
-      b.name.trim(), b.description || null, perms.join(","));
-    audit("role", col("SELECT id FROM roles WHERE name=?", b.name.trim()), "create", `Role ${b.name} created`, user.id);
-  }
+  tx(() => {
+    if (id) {
+      const ex = one("SELECT * FROM roles WHERE id=?", id) || missing("Role not found.");
+      run("UPDATE roles SET name=?, description=?, permissions=? WHERE id=?",
+        ex.is_system ? ex.name : b.name.trim(), b.description || null, perms.join(","), id);
+      audit("role", id, "update", `Role ${ex.name} updated`, user.id, "permissions", ex.permissions, perms.join(","));
+    } else {
+      if (col("SELECT id FROM roles WHERE name=?", b.name.trim())) bad("A role with that name already exists.");
+      run("INSERT INTO roles(name,description,permissions,is_system,sort) VALUES(?,?,?,0,(SELECT COALESCE(MAX(sort),0)+1 FROM roles))",
+        b.name.trim(), b.description || null, perms.join(","));
+      audit("role", col("SELECT id FROM roles WHERE name=?", b.name.trim()), "create", `Role ${b.name} created`, user.id);
+    }
+    assertAdminRemains();
+  });
   return all("SELECT * FROM roles ORDER BY sort, name");
 }
 
@@ -976,14 +1053,21 @@ export function deleteRole(user, id) {
   if (r.is_system) bad("The six roles named in the BRD are system roles and cannot be deleted. Edit their permissions instead.");
   const used = col("SELECT COUNT(*) FROM stages WHERE owner_role_id=? OR approver_role_id=? OR escalate_role_id=?", id, id, id);
   if (used) bad("This role is referenced by the stage model. Reassign those stages first.");
-  run("DELETE FROM roles WHERE id=?", id);
-  audit("role", id, "delete", `Role ${r.name} deleted`, user.id);
+  tx(() => {
+    run("DELETE FROM roles WHERE id=?", id);
+    audit("role", id, "delete", `Role ${r.name} deleted`, user.id);
+    assertAdminRemains();
+  });
   return all("SELECT * FROM roles ORDER BY sort, name");
 }
 
 export function saveStage(user, id, b) {
   need(user, "stagemodel.manage");
   const s = one("SELECT * FROM stages WHERE id=?", id) || missing("Stage not found.");
+  // An unchosen <select> posts "", which `?? existing` would treat as a value. Normalise to null once.
+  for (const k of ["owner_role_id", "approver_role_id", "escalate_role_id"]) if (b[k] === "") b[k] = null;
+  if (s.track === "development" && b.approver_role_id === null)
+    bad(`Gate ${s.seq} "${s.name}" must keep an approver — without one no one could ever decide it (BR-07).`, "BR-07");
   run(`UPDATE stages SET name=?, purpose=?, definition=?, owner_role_id=?, approver_role_id=?, escalate_role_id=?,
         target_days=?, ageing_days=?, entry_condition=?, exit_condition=? WHERE id=?`,
     b.name || s.name, b.purpose ?? s.purpose, b.definition ?? s.definition,

@@ -1,7 +1,7 @@
 // CRM — dashboard, lead register, lead record with the stage engine, pipeline board, reports.
 import {
-  S, api, esc, fmtDate, fmtDT, money0, can, me, ICON, toast, errToast, openForm, openPanel, openMenu,
-  confirmAction, dataTable, link, bar, statusBadge, refresh, go, render, setting, initials, crmRefresh
+  S, api, esc, fmtDate, fmtDT, money0, cur, can, me, ICON, toast, errToast, openForm, openPanel, openMenu,
+  confirmAction, dataTable, link, bar, statusBadge, refresh, go, render, renderInPlace, setting, initials, crmRefresh
 } from "./app.js";
 
 const crm = () => S.crm || {};
@@ -36,7 +36,11 @@ const opts = (key, sel, blank = "— none —") => [
 const wireRows = () => document.querySelectorAll("tr[data-row]").forEach(tr =>
   tr.addEventListener("click", e => { if (!e.target.closest("a,button,input,select")) go(tr.dataset.row); }));
 
-const after = async msg => { await crmRefresh(); await render(); if (msg) toast("ok", msg); };
+const after = async msg => {
+  const y = window.scrollY;
+  await crmRefresh(); await renderInPlace(); window.scrollTo(0, y);
+  if (msg) toast("ok", msg);
+};
 
 /* =================================================================== */
 /* DASHBOARD                                                            */
@@ -45,7 +49,8 @@ export async function dashboard() {
   const d = cdash(), k = d.kpi || {};
   const maxBand = Math.max(1, ...(d.bands || []).map(b => b.n));
   const maxChan = Math.max(1, ...(d.channels || []).map(c => c.n));
-  const kpi = (cls, key, value, meta, href) => `<div class="kpi ${cls} ${href ? "click" : ""}" ${href ? `data-goto="${href}"` : ""}>
+  const kpi = (cls, key, value, meta, href, filter) => `<div class="kpi ${cls} ${href ? "click" : ""}"
+    ${href ? `data-goto="${href}" tabindex="0" role="link"` : ""} ${filter ? `data-filter="${filter}"` : ""}>
     <div class="k">${esc(key)}</div><div class="v">${value}</div><div class="m">${esc(meta)}</div></div>`;
 
   return {
@@ -57,7 +62,7 @@ export async function dashboard() {
             The CRM records fact; the revenue projection workbook stays the planning instrument.</div></div>
         <div class="actions">
           <a class="btn" href="#/crm/reports/CRM-06">Blocked by field</a>
-          ${can("crm.lead.manage") ? `<button class="btn brand" data-a="new-lead">${ICON.plus} New Lead</button>` : ""}
+          ${can("crm.lead.create") ? `<button class="btn brand" data-a="new-lead">${ICON.plus} New Lead</button>` : ""}
         </div>
       </div>
 
@@ -75,11 +80,11 @@ export async function dashboard() {
       </div>` : ""}
 
       <div class="kpis">
-        ${kpi("", "Open leads", k.open ?? 0, `${k.total ?? 0} on file · ${k.lost ?? 0} lost`, "/crm/leads")}
+        ${kpi("", "Open leads", k.open ?? 0, `${k.total ?? 0} on file · ${k.lost ?? 0} lost`, "/crm/leads", "open")}
         ${kpi("g", "Past qualification", k.past_qualification ?? 0, "Qualified, CSE and Closed", "/crm/reports/CRM-01")}
         ${kpi("", "Content attributed", k.attributed ?? 0, `${k.published ?? 0} items published`, "/crm/reports/CRM-03")}
-        ${kpi(k.blocked ? "r" : "n", "Blocked from next stage", k.blocked ?? 0, "missing a required field", "/crm/reports/CRM-06")}
-        ${kpi(k.unassigned ? "y" : "n", "No pipeline yet", k.unassigned ?? 0, "Offering and Industry both needed", "/crm/leads")}
+        ${kpi(k.blocked ? "r" : "n", "Blocked from next stage", k.blocked ?? 0, "missing a required field", "/crm/leads", "blocked")}
+        ${kpi(k.unassigned ? "y" : "n", "No pipeline yet", k.unassigned ?? 0, "Offering and Industry both needed", "/crm/leads", "nopipe")}
         ${kpi("n", "Content items", k.content ?? 0, `${k.prompts ?? 0} launch prompt${k.prompts === 1 ? "" : "s"} open`, "/crm/calendar")}
       </div>
 
@@ -158,7 +163,10 @@ export async function dashboard() {
         </div>
       </div></main>`,
     mount() {
-      document.querySelectorAll("[data-goto]").forEach(el => el.onclick = () => go(el.dataset.goto));
+      document.querySelectorAll("[data-goto]").forEach(el => {
+        el.onclick = () => { if (el.dataset.filter) leadFilter.status = el.dataset.filter; go(el.dataset.goto); };
+        el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.onclick(); } };
+      });
       document.querySelector('[data-a="new-lead"]')?.addEventListener("click", newLead);
       wireRows();
     }
@@ -169,6 +177,11 @@ export async function dashboard() {
 /* LEAD REGISTER                                                        */
 /* =================================================================== */
 let leadFilter = { status: "open", band: "", offering: "", channel: "", owner: "", q: "" };
+
+const countLine = list => {
+  const v = list.reduce((n, l) => n + (Number(l.est_annual_value) || 0), 0);
+  return `${list.length} lead${list.length === 1 ? "" : "s"}` + (v ? ` · ${cur()} ${money0(v)} a year` : "");
+};
 
 export async function leads() {
   const rows = await api("/crm/leads");
@@ -200,8 +213,14 @@ export async function leads() {
       { label: "Stage", cell: l => l.stage_name ? esc(l.stage_name) : `<span style="color:var(--ink-4)">unassigned</span>` },
       { label: "Band", cell: l => bandBadge(l.stage_band) },
       { label: "Status", cell: l => statusPill(l.status) },
+      { label: "Annual value", align: "r",
+        cell: l => l.est_annual_value != null ? `<b>${money0(l.est_annual_value)}</b>` : `<span style="color:var(--ink-4)">—</span>` },
+      { label: "Activity", cell: l => l.primary_content_id
+        ? `<a href="#/crm/content/${l.primary_content_id}" class="trunc" style="max-width:12rem;display:inline-block">${esc(l.activity || "content")}</a>`
+        : esc(l.activity || "—") },
       { label: "Channel", cell: l => esc(l.channel_name || "—") },
       { label: "Lead Source", cell: l => sourcePill(l.effective_source) },
+      { label: "Invoice", cell: l => l.invoice_no ? `<span class="mono" style="font-size:.6875rem">${esc(l.invoice_no)}</span>` : "—" },
       { label: "Owner", cell: l => esc(l.owner_name || "—") },
       { label: "Next move", cell: l => nextMoveBadge(l) }
     ], rows: list, onRow: l => `/crm/lead/${l.id}`,
@@ -219,7 +238,7 @@ export async function leads() {
             is configuration, not code — see Setup → Requirement matrix.</div></div>
         <div class="actions">
           <a class="btn" href="/api/crm/reports/CRM-08?format=csv">Export history</a>
-          ${can("crm.lead.manage") ? `<button class="btn brand" data-a="new-lead">${ICON.plus} New Lead</button>` : ""}
+          ${can("crm.lead.create") ? `<button class="btn brand" data-a="new-lead">${ICON.plus} New Lead</button>` : ""}
         </div>
       </div>
       <div class="card">
@@ -229,7 +248,7 @@ export async function leads() {
                ["won", "Won"], ["lost", "Lost"]].map(([v, l]) =>
               `<option value="${v}" ${leadFilter.status === v ? "selected" : ""}>${l}</option>`).join("")}
           </select>
-          <span class="count" id="lcount">${shown.length} lead${shown.length === 1 ? "" : "s"}</span>
+          <span class="count" id="lcount">${countLine(shown)}</span>
           <span class="spacer"></span>
           <input class="inp" id="fq" type="search" placeholder="Search company or contact…" value="${esc(leadFilter.q)}" style="width:15rem">
         </div>
@@ -252,7 +271,7 @@ export async function leads() {
       const redraw = () => {
         const list = draw();
         document.getElementById("lbody").innerHTML = table(list);
-        document.getElementById("lcount").textContent = `${list.length} lead${list.length === 1 ? "" : "s"}`;
+        document.getElementById("lcount").textContent = countLine(list);
         wireRows();
       };
       const bind = (id, key) => document.getElementById(id).onchange = e => { leadFilter[key] = e.target.value; redraw(); };
@@ -271,10 +290,12 @@ export async function leads() {
 
 function exportLeads(list) {
   const cols = ["Company", "Contact", "Designation", "Email", "Phone", "Offering", "Industry", "Customer Segment",
-    "Stage", "Band", "Status", "Channel", "Lead Source", "Owner", "Next move", "Days at stage"];
+    "Stage", "Band", "Status", "Estimated annual order value", "Activity Name", "Social channel",
+    "Odoo invoice number", "Channel", "Lead Source", "Owner", "Next move", "Days at stage"];
   const cell = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const rows = list.map(l => [l.company, l.customer, l.designation, l.email, l.contact, l.offering_name,
-    l.industry_name, l.segment_name, l.stage_name, l.stage_band, l.status, l.channel_name,
+    l.industry_name, l.segment_name, l.stage_name, l.stage_band, l.status, l.est_annual_value,
+    l.activity, l.activity_channel_name, l.invoice_no, l.channel_name,
     l.effective_source, l.owner_name, l.next_move, l.days_at_stage]);
   const csv = "﻿" + [cols.join(","), ...rows.map(r => r.map(cell).join(","))].join("\r\n");
   const a = document.createElement("a");
@@ -313,13 +334,19 @@ export async function lead(id) {
     ["history", "History", String(det.history.length)], ["notes", "Notes", String(det.notes.length)]];
   if (!tabs.some(t => t[0] === leadTab)) leadTab = "detail";
 
+  const canMove = can("crm.lead.move") && !l.lost;
   const path = stages.length ? `<div class="pathwrap">
     <div class="pathlbl"><span class="t">${esc(l.pipeline_name || "")}</span>
-      <span class="d">${esc(l.template_name || "")} · ${esc(l.source_ref || "")} · gate at “${esc(l.gate_name || "—")}”</span></div>
+      <span class="d">${esc(l.template_name || "")} · ${esc(l.source_ref || "")} · gate at “${esc(l.gate_name || "—")}”${
+        can("crm.lead.move") ? "" : " · you may not move leads between stages"}</span></div>
     <div class="path">${stages.map(s => {
       const cls = l.stage_seq === s.seq ? "cur" : (l.stage_seq && s.seq < l.stage_seq) ? "done" : "";
+      const impossible = !canMove
+        || (l.stage_seq && s.seq < l.stage_seq && !crm().movement?.allowBack)
+        || (l.stage_seq && s.seq > l.stage_seq + 1 && !crm().movement?.allowSkip);
       return `<button class="step ${cls} ${s.band === "Closed" && cls === "cur" ? "end" : ""}"
-        data-move="${s.seq}" title="${esc(s.band)}${s.is_gate ? " · qualification gate" : ""}">
+        ${impossible ? "disabled" : `data-move="${s.seq}"`}
+        title="${esc(s.name)} — ${esc(s.band)}${s.is_gate ? " · qualification gate" : ""}">
         <span class="n">${s.is_gate ? "◆" : String(s.seq).padStart(2, "0")}</span> ${esc(s.name)}</button>`;
     }).join("")}</div></div>`
     : `<div class="warnbox"><b>No pipeline.</b> A pipeline is derived from Offering × Industry (BR-04).
@@ -331,7 +358,9 @@ export async function lead(id) {
       ? `<div class="errbox"><b>Blocked from “${esc(nextStage?.name || "the next stage")}”.</b>
           These fields are configured as mandatory at or before that stage and are not recorded:
           <ul style="margin:.375rem 0 0 1rem">${l.missing.map(m =>
-            `<li>${esc(m.label)}${m.conditional ? " <i>(required because Lead Source is Online)</i>" : ""}</li>`).join("")}</ul></div>`
+            `<li>${esc(m.label)}${m.conditional ? " <i>(required because Lead Source is Online)</i>" : ""}</li>`).join("")}</ul>
+          ${can("crm.lead.manage") ? `<button class="btn sm brand" data-a="edit2" style="margin-top:.5rem">
+            Record ${l.missing.length === 1 ? "it" : "them"} now</button>` : ""}</div>`
       : nextStage
         ? `<div class="okbox"><b>Ready to move.</b> Every field mandatory at “${esc(nextStage.name)}” is recorded.</div>`
         : stages.length ? `<div class="infobox"><b>At the final stage.</b> There is nowhere further to move.</div>` : "";
@@ -383,9 +412,10 @@ export async function lead(id) {
 function leadActions(l, det, nextStage) {
   const el = document.getElementById("lacts");
   const editable = can("crm.lead.manage");
+  const movable = can("crm.lead.move");
   const btns = [];
-  if (editable && !l.lost && nextStage)
-    btns.push(`<button class="btn brand" data-a="next">Move to “${esc(nextStage.name)}” →</button>`);
+  if (movable && !l.lost && nextStage)
+    btns.push(`<button class="btn brand" data-a="next" ${(l.missing || []).length ? "disabled title=\"Record the missing fields first\"" : ""}>Move to “${esc(nextStage.name)}” →</button>`);
   if (editable) btns.push(`<button class="btn" data-a="edit">Edit</button>`);
   if (editable) btns.push(l.lost
     ? `<button class="btn" data-a="reopen">Reopen</button>`
@@ -393,13 +423,13 @@ function leadActions(l, det, nextStage) {
   btns.push(`<button class="btn icon" data-a="more">${ICON.down}</button>`);
   el.innerHTML = btns.join("");
   el.querySelector('[data-a="next"]')?.addEventListener("click", () => attemptMove(l, l.stage_seq + 1, det.stages));
-  el.querySelector('[data-a="edit"]')?.addEventListener("click", () => editLead(l, det));
+  el.querySelector('[data-a="edit"]')?.addEventListener("click", () => editLead(l, det).catch(errToast));
   el.querySelector('[data-a="lost"]')?.addEventListener("click", () => markLost(l));
   el.querySelector('[data-a="reopen"]')?.addEventListener("click", () => reopenLead(l));
   el.querySelector('[data-a="more"]').onclick = e => {
     const items = [];
     if (editable) items.push({ label: "Override Lead Source", onClick: () => overrideSource(l) });
-    if (editable) items.push({ label: "Attach content", onClick: () => attachContent(l) });
+    if (editable) items.push({ label: "Attach content", onClick: () => attachContent(l, det).catch(errToast) });
     if (editable) items.push({ label: "Add a note", onClick: () => addNote(l) });
     items.push("-", { label: "Blocked-by-field report", onClick: () => go("/crm/reports/CRM-06") });
     openMenu(e.currentTarget, items);
@@ -426,6 +456,13 @@ function detailTab(l, det) {
           ? ` <span class="badge y">overridden</span>` : ` <span style="font-size:.6875rem;color:var(--ink-4)">derived from the channel</span>`) : "";
       case "content": return l.primary_content_id
         ? `<a href="#/crm/content/${l.primary_content_id}">${esc(l.primary_content_title || "content")}</a>` : "";
+      case "activity": return l.primary_content_id
+        ? `<a href="#/crm/content/${l.primary_content_id}">${esc(l.activity || l.primary_content_title || "content")}</a>`
+          + (l.activity_channel_name ? ` <span class="badge">${esc(l.activity_channel_name)}</span>` : "")
+        : esc(l.activity || "");
+      case "value": return l.est_annual_value != null
+        ? `<b>${esc(cur())} ${money0(l.est_annual_value)}</b> <span style="font-size:.6875rem;color:var(--ink-4)">a year</span>` : "";
+      case "invoice_no": return l.invoice_no ? `<span class="mono">${esc(l.invoice_no)}</span>` : "";
       case "email": return l.email ? `<a href="mailto:${esc(l.email)}">${esc(l.email)}</a>` : "";
       default: return esc(l[f.key] ?? l.custom?.[f.key] ?? "");
     }
@@ -506,16 +543,26 @@ const notesTab = det => `<div class="card" style="margin:0">
 </div>`;
 
 function wireLeadTab(l, det) {
-  document.querySelector('[data-a="edit2"]')?.addEventListener("click", () => editLead(l, det));
-  document.querySelector('[data-a="attach"]')?.addEventListener("click", () => attachContent(l));
+  document.querySelectorAll('[data-a="edit2"]').forEach(b => b.onclick = () => editLead(l, det).catch(errToast));
+  document.querySelector('[data-a="attach"]')?.addEventListener("click", () => attachContent(l, det).catch(errToast));
   document.querySelector('[data-a="note"]')?.addEventListener("click", () => addNote(l));
   document.querySelector('[data-a="clearoverride"]')?.addEventListener("click", async () => {
     try { await api(`/crm/leads/${l.id}/source`, { method: "POST", body: { clear: true } }); await after("Override cleared."); }
     catch (e) { errToast(e); }
   });
-  document.querySelectorAll("[data-detach]").forEach(b => b.onclick = async () => {
-    try { await api(`/crm/leads/${l.id}/attach/${b.dataset.detach}`, { method: "DELETE" }); await after("Content detached."); }
-    catch (e) { errToast(e); }
+  document.querySelectorAll("[data-detach]").forEach(b => b.onclick = () => {
+    const t = det.touches.find(x => String(x.content_id) === b.dataset.detach);
+    confirmAction({
+      title: `Detach “${t?.title || "this content"}”`, submit: "Detach", danger: true,
+      body: t?.is_primary
+        ? "This is the primary attribution, so detaching it also clears the lead's Activity Name. "
+          + "The content item itself is untouched."
+        : "The touch is removed from this lead. The content item itself is untouched.",
+      onConfirm: async () => {
+        await api(`/crm/leads/${l.id}/attach/${b.dataset.detach}`, { method: "DELETE" });
+        await after("Content detached.");
+      }
+    });
   });
   document.querySelectorAll("[data-primary]").forEach(b => b.onclick = async () => {
     try {
@@ -528,8 +575,10 @@ function wireLeadTab(l, det) {
 /* ---------------- lead actions ---------------- */
 async function attemptMove(l, toSeq, stages) {
   const target = stages.find(s => s.seq === toSeq);
-  if (!target) return;
+  if (!target || toSeq === l.stage_seq) return;          // dropping a card back where it was is not an error
   const back = l.stage_seq && toSeq < l.stage_seq;
+  if (back && !crm().movement?.allowBack)
+    return toast("err", "Backward movement is switched off in Setup → Movement rules.", "BR-22");
   if (back || (crm().movement?.allowSkip && toSeq > l.stage_seq + 1)) {
     openForm({
       title: back ? `Move ${l.company} back to “${target.name}”` : `Move ${l.company} to “${target.name}”`,
@@ -555,26 +604,53 @@ async function attemptMove(l, toSeq, stages) {
       title: "The move was refused", size: "sm",
       html: `<div class="errbox" style="margin:0"><b>${esc(e.message)}</b></div>
         ${e.rule ? `<p class="note" style="margin-top:.625rem">Business rule <span class="mono">${esc(e.rule)}</span>.
-          Which fields are mandatory at which stage is configuration — Setup → Requirement matrix.</p>` : ""}`
+          Which fields are mandatory at which stage is configuration — Setup → Requirement matrix.</p>` : ""}`,
+      footer: can("crm.lead.manage")
+        ? `<button class="btn" data-close>Close</button><button class="btn brand" data-fix>Record the missing fields</button>`
+        : `<button class="btn" data-close>Close</button>`
+    });
+    document.querySelector("[data-fix]")?.addEventListener("click", () => {
+      document.querySelector("dialog.modal")?.remove();
+      go(`/crm/lead/${l.id}`);
     });
     await after();
   }
 }
 
-function editLead(l, det) {
-  const fields = det.fields.filter(f => !["source", "content"].includes(f.key)).map(f => {
+/** The content items a lead's Activity Name may point at — fetched once per form, newest first. */
+async function contentChoices() {
+  const items = await api("/crm/content");
+  return items.map(c => ({
+    value: c.id, group: c.channel_id, label: `${c.title} — ${c.date}`,
+    hint: `${c.channel_name || "no channel"} · ${c.type_name || "no type"} · ${c.person_name || "no author"} · ${c.status}`
+  }));
+}
+
+async function editLead(l, det) {
+  const needsPicker = det.fields.some(f => f.type === "content");
+  const items = needsPicker ? await contentChoices() : [];
+  const fields = det.fields.filter(f => f.key !== "source").map(f => {
     const base = { name: f.key, label: f.label, help: f.help || undefined };
+    // Activity Name — choose the social channel, then the post, filtering by a few letters (BR-33).
+    if (f.type === "content") return { ...base, type: "picker", items,
+      groups: (crm().contentChannels || []).map(c => ({ value: c.id, label: c.name })),
+      group: l.activity_channel_id ?? "", value: String(l.primary_content_id ?? ""),
+      groupLabel: "Social channel", groupBlank: "Every channel",
+      searchPlaceholder: "Search post names…", blank: "— no activity —",
+      emptyHint: "No content has been planned yet. Plan it on the Content Calendar and it appears here." };
     if (f.type === "list") return { ...base, type: "select", options: opts(f.list_source, l[f.key + "_id"] ?? l[f.key]),
       value: String(l[({ industry: "industry_id", segment: "segment_id", offering: "offering_id",
         channel: "channel_id", owner: "owner_id" }[f.key]) || f.key] ?? "") };
     if (f.key === "company") return { ...base, required: true, value: l.company, cols: "full" };
+    if (f.key === "value") return { ...base, type: "number", min: 0, step: "1", value: l.est_annual_value ?? "" };
     const type = { number: "number", date: "date", phone: "tel", email: "email" }[f.type] || "text";
     return { ...base, type, value: l[f.key] ?? l.custom?.[f.key] ?? "" };
   });
   openForm({
     title: `Edit ${l.company}`, size: "lg",
     rule: `<b>BR-04.</b> Setting Offering and Industry derives the pipeline. Changing either re-derives it and places
-      the lead at the same band on the new pipeline (BR-07). <b>BR-25</b> — the channel derives Lead Source.`,
+      the lead at the same band on the new pipeline (BR-07). <b>BR-25</b> — the channel derives Lead Source, and an
+      Offline source means Activity Name is never asked for.`,
     fields, submit: "Save",
     onSubmit: async d => {
       const r = await api(`/crm/leads/${l.id}`, { method: "PATCH", body: d });
@@ -626,20 +702,42 @@ const addNote = l => openForm({
   onSubmit: async d => { await api(`/crm/leads/${l.id}/note`, { method: "POST", body: d }); await after("Note added."); }
 });
 
-async function attachContent(l) {
-  const items = await api("/crm/content");
+async function attachContent(l, det) {
+  const attached = new Set((det?.touches || []).map(t => t.content_id));
+  const items = (await contentChoices()).filter(c => !attached.has(c.value));
+  if (!items.length) {
+    openPanel({
+      title: attached.size ? "Everything planned is already attached" : "No content has been planned yet",
+      size: "sm",
+      html: `<div class="empty">${attached.size
+        ? "Every content item on the calendar is already a touch on this lead."
+        : "Content is planned on the Content Calendar. Plan it there and it becomes attachable here."}</div>`,
+      footer: `<button class="btn" data-close>Close</button>${can("crm.content.manage")
+        ? `<button class="btn brand" data-cal>Open the Content Calendar</button>` : ""}`
+    });
+    document.querySelector("[data-cal]")?.addEventListener("click", () => {
+      document.querySelector("dialog.modal")?.remove(); go("/crm/calendar");
+    });
+    return;
+  }
   openForm({
     title: `Attach content to ${l.company}`, size: "",
-    rule: `<b>BR-33.</b> One primary attribution answers “where did this come from”. Every other item is a
-      contributing touch. The primary is always also a touch.`,
+    rule: `<b>BR-33.</b> One primary attribution answers “where did this come from” — it is the same fact as
+      Activity Name, so setting it here sets that too. Every other item is a contributing touch.`,
     fields: [
-      { name: "content_id", label: "Content item", type: "select", required: true, cols: "full",
-        options: items.map(c => ({ value: c.id, label: `${c.date} — ${c.title} (${c.channel_name || "—"}, ${c.person_name || "—"})` })) },
-      { name: "primary", label: "This is the primary attribution", type: "checkbox", cols: "full",
-        checked: !l.primary_content_id }
+      { name: "content_id", label: "Content item", type: "picker", required: true, items,
+        groups: (crm().contentChannels || []).map(c => ({ value: c.id, label: c.name })),
+        groupLabel: "Social channel", groupBlank: "Every channel",
+        searchPlaceholder: "Search post names…", blank: "— choose the item —" },
+      { name: "primary", label: "This is the primary attribution (it becomes the lead's Activity Name)",
+        type: "checkbox", cols: "full", checked: !l.primary_content_id }
     ],
     submit: "Attach",
-    onSubmit: async d => { await api(`/crm/leads/${l.id}/attach`, { method: "POST", body: d }); await after("Content attached."); }
+    onSubmit: async d => {
+      if (!d.content_id) throw new Error("Choose a content item from the list.");
+      await api(`/crm/leads/${l.id}/attach`, { method: "POST", body: d });
+      await after("Content attached.");
+    }
   });
 }
 
@@ -655,6 +753,8 @@ export async function board() {
   boardPipeline = p.id;
   const all = await api("/crm/leads");
   const rows = all.filter(l => l.pipeline_id === p.id && !l.lost);
+  const movable = can("crm.lead.move");
+  const boardValue = rows.reduce((n, l) => n + (Number(l.est_annual_value) || 0), 0);
 
   return {
     html: `<main>
@@ -662,12 +762,15 @@ export async function board() {
         <div class="icon" style="background:var(--brand)">${ICON.gate}</div>
         <div><div class="eyebrow">CRM</div><h1>Pipeline Board</h1>
           <div class="desc">${esc(p.template_name || "")} · ${esc(p.source_ref || "")} · owner ${esc(p.owner_name || "—")}
-            · gate at “${esc(p.gate_name || "—")}”. Dragging a card runs the same engine as the record page — a refused
-            drag returns the card and shows why.</div></div>
+            · gate at “${esc(p.gate_name || "—")}”. ${movable
+              ? "Dragging a card runs the same engine as the record page — a refused drag returns the card and shows why."
+              : "Your roles do not carry “Move a lead between pipeline stages”, so the cards are read-only here."}</div></div>
         <div class="actions">
+          <span class="badge">${rows.length} open · ${esc(cur())} ${money0(boardValue)} a year</span>
           <select class="inp" id="bpipe" style="width:auto">
             ${pipes.map(x => `<option value="${x.id}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)} — ${esc(x.industries.map(i => i.name).join(", "))}</option>`).join("")}
           </select>
+          ${can("crm.lead.create") ? `<button class="btn brand" data-a="new-lead">${ICON.plus} New Lead</button>` : ""}
         </div>
       </div>
       <div class="boardwrap"><div class="board">
@@ -678,11 +781,12 @@ export async function board() {
               <span class="badge ${BANDCLASS[s.band] ?? ""}">${esc(s.band)}</span>
               <span class="n">${cards.length}</span></div>
             <div class="bbody" data-drop="${s.seq}">
-              ${cards.map(l => `<div class="bcard ${(l.missing || []).length ? "warn" : ""}" draggable="true" data-lead="${l.id}">
-                <b>${esc(l.company)}</b>
+              ${cards.map(l => `<div class="bcard ${(l.missing || []).length ? "warn" : ""}" draggable="${movable}" data-lead="${l.id}">
+                <b><a href="#/crm/lead/${l.id}">${esc(l.company)}</a></b>
                 <div class="m">${esc(l.customer || "—")}${l.designation ? ` · ${esc(l.designation)}` : ""}</div>
                 <div class="m">${esc(l.channel_name || "no channel")} ${sourcePill(l.effective_source)}</div>
-                ${l.primary_content_title ? `<div class="m">◆ ${esc(l.primary_content_title)}</div>` : ""}
+                ${l.est_annual_value != null ? `<div class="m"><b>${esc(cur())} ${money0(l.est_annual_value)}</b> a year</div>` : ""}
+                ${l.activity ? `<div class="m">◆ ${esc(l.activity)}</div>` : ""}
                 <div class="bfoot">${nextMoveBadge(l)}<span>${l.days_at_stage ?? 0}d</span></div>
               </div>`).join("") || `<div class="bempty">—</div>`}
             </div></div>`;
@@ -690,11 +794,14 @@ export async function board() {
       </div></div></main>`,
     mount() {
       document.getElementById("bpipe").onchange = e => { boardPipeline = Number(e.target.value); render(); };
+      document.querySelector('[data-a="new-lead"]')?.addEventListener("click", newLead);
       document.querySelectorAll(".bcard").forEach(c => {
         c.addEventListener("click", e => { if (!e.target.closest("button")) go(`/crm/lead/${c.dataset.lead}`); });
+        if (!movable) return;
         c.addEventListener("dragstart", e => { e.dataTransfer.setData("text/plain", c.dataset.lead); c.classList.add("dragging"); });
         c.addEventListener("dragend", () => c.classList.remove("dragging"));
       });
+      if (!movable) return;
       document.querySelectorAll("[data-drop]").forEach(z => {
         z.addEventListener("dragover", e => { e.preventDefault(); z.classList.add("over"); });
         z.addEventListener("dragleave", () => z.classList.remove("over"));

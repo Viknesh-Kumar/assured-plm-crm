@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { one, run, col, secret, audit, DB_PATH } from "./db.mjs";
 import { seedIfEmpty } from "./seed.mjs";
-import { seedCRMIfEmpty } from "./crm-seed.mjs";
+import { seedCRMIfEmpty, migrateCRM } from "./crm-seed.mjs";
 import { signSession, readSession, verifyPassword } from "./lib.mjs";
 import * as A from "./api.mjs";
 import * as C from "./crm.mjs";
@@ -22,6 +22,7 @@ const SESSION_HOURS = 12;
 
 seedIfEmpty();
 seedCRMIfEmpty();
+migrateCRM();               // brings a database seeded by an earlier release up to the current catalogue
 const SECRET = secret();
 
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
@@ -99,6 +100,7 @@ const routes = [
   ["DELETE", "/api/products/:id/effort/:sub", ({ user, id, sub }) => A.deleteEffort(user, id, sub)],
   ["POST", "/api/products/:id/deployment", ({ user, id, body }) => A.recordDeployment(user, id, body)],
   ["POST", "/api/products/:id/deployment/:sub/confirm", ({ user, id, sub }) => A.confirmRevenue(user, id, sub)],
+  ["DELETE", "/api/products/:id/deployment/:sub", ({ user, id, sub }) => A.deleteDeployment(user, id, sub)],
   ["POST", "/api/products/:id/revise",    ({ user, id, body })  => A.reviseDate(user, id, body)],
   ["POST", "/api/products/:id/market",    ({ user, id, body })  => A.changeMarketState(user, id, body)],
   ["POST", "/api/products/:id/park",      ({ user, id, body })  => A.park(user, id, body)],
@@ -162,6 +164,11 @@ const routes = [
   ["GET",  "/api/crm/content/:id",        ({ user, id })        => C.contentDetail(user, id)],
   ["PATCH", "/api/crm/content/:id",       ({ user, id, body })  => C.saveContent(user, id, body)],
   ["DELETE", "/api/crm/content/:id",      ({ user, id })        => C.deleteContent(user, id)],
+
+  ["GET",  "/api/crm/targets",            ({ url })             => C.listTargets(url.searchParams.get("period") || null)],
+  ["POST", "/api/crm/targets",            ({ user, body })      => C.saveTarget(user, null, body)],
+  ["PATCH", "/api/crm/targets/:id",       ({ user, id, body })  => C.saveTarget(user, id, body)],
+  ["DELETE", "/api/crm/targets/:id",      ({ user, id })        => C.deleteTarget(user, id)],
 
   ["GET",  "/api/crm/prompts",            ({ url })             => C.listPrompts(url.searchParams.get("status") || null)],
   ["POST", "/api/crm/prompts/:id/dismiss", ({ user, id, body }) => C.dismissPrompt(user, id, body)],

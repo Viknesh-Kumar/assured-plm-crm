@@ -29,6 +29,17 @@ CREATE TABLE IF NOT EXISTS user_roles (
   PRIMARY KEY (user_id, role_id)
 );
 
+-- A permission granted to one person on top of their roles, so "only these three may move a lead
+-- between stages" does not require inventing a role for every combination. Effective access is the
+-- union of the roles held and the rows here. Gate approval authority is NOT granted this way — it is
+-- read from the stage model, so a direct grant can never make someone an approver.
+CREATE TABLE IF NOT EXISTS user_permission (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  permission TEXT NOT NULL,
+  granted_by INTEGER REFERENCES users(id), granted_at TEXT,
+  PRIMARY KEY (user_id, permission)
+);
+
 -- The stage model (FR-51): 8 development gates + 6 market states, configurable.
 CREATE TABLE IF NOT EXISTS stages (
   id INTEGER PRIMARY KEY, seq INTEGER NOT NULL, track TEXT NOT NULL,       -- development | market
@@ -221,6 +232,7 @@ CREATE TABLE IF NOT EXISTS lead (
   segment_id INTEGER REFERENCES customer_segment(id), channel_id INTEGER REFERENCES channel(id),
   source TEXT, source_override INTEGER NOT NULL DEFAULT 0, source_override_reason TEXT,
   customer TEXT, designation TEXT, location TEXT, contact TEXT, email TEXT, activity TEXT,
+  est_annual_value REAL, invoice_no TEXT,
   primary_content_id INTEGER REFERENCES content(id),
   lost INTEGER NOT NULL DEFAULT 0, lost_reason TEXT, lost_at TEXT, lost_stage_id INTEGER,
   created_at TEXT NOT NULL, created_by INTEGER REFERENCES users(id), updated_at TEXT);
@@ -252,7 +264,19 @@ CREATE TABLE IF NOT EXISTS content (
   person_id INTEGER NOT NULL REFERENCES users(id),
   offering_id INTEGER REFERENCES offering(id), industry_id INTEGER REFERENCES industry(id),
   theme TEXT, status TEXT NOT NULL DEFAULT 'Planned', url TEXT,
+  engagement_metric TEXT, engagement_value INTEGER,
   created_at TEXT NOT NULL, created_by INTEGER REFERENCES users(id));
+
+-- A publishing target: how many items of one (channel, type, person) should go out in one month.
+-- Achievement is counted, never stored — it is the published content that matches the triple.
+CREATE TABLE IF NOT EXISTS content_target (
+  id INTEGER PRIMARY KEY, period TEXT NOT NULL,                                 -- YYYY-MM
+  channel_id INTEGER NOT NULL REFERENCES content_channel(id),
+  type_id INTEGER NOT NULL REFERENCES content_type(id),
+  person_id INTEGER NOT NULL REFERENCES users(id),
+  target INTEGER NOT NULL, note TEXT,
+  created_at TEXT NOT NULL, created_by INTEGER REFERENCES users(id),
+  UNIQUE (period, channel_id, type_id, person_id));
 
 -- Not in AGC-BRD-CRM-001: carries the PLM hand-off. A product entering market state Seeding
 -- raises a prompt on the content calendar; a human turns it into a content item (BR-31 still applies).
@@ -270,6 +294,7 @@ CREATE INDEX IF NOT EXISTS ix_touch_cont   ON lead_content_touch(content_id);
 CREATE INDEX IF NOT EXISTS ix_content_date ON content(date);
 CREATE INDEX IF NOT EXISTS ix_pstage_pipe  ON pipeline_stage(pipeline_id, seq);
 CREATE INDEX IF NOT EXISTS ix_prompt_stat  ON content_prompt(status);
+CREATE INDEX IF NOT EXISTS ix_target_per   ON content_target(period);
 
 CREATE INDEX IF NOT EXISTS ix_hist_prod   ON stage_history(product_id);
 CREATE INDEX IF NOT EXISTS ix_eff_prod    ON effort_entries(product_id);
@@ -278,13 +303,28 @@ CREATE INDEX IF NOT EXISTS ix_audit_ent   ON audit(entity, entity_id);
 CREATE INDEX IF NOT EXISTS ix_notif_user  ON notifications(user_id, read);
 `);
 
-/* Rename carried over from the pre-approval-only model. Safe to run on a fresh database. */
+/* ---------- migrations ----------
+   CREATE TABLE IF NOT EXISTS never adds a column to a table that already exists, so every column added
+   after the first release is also declared here. Both blocks are no-ops on a fresh database. */
+
+/* Rename carried over from the pre-approval-only model. */
 try {
   const t = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('stage_consulted','stage_participant')").all().map(r => r.name);
   if (t.includes("stage_consulted") && !t.includes("stage_participant"))
     db.exec("ALTER TABLE stage_consulted RENAME TO stage_participant");
   db.exec("DROP TABLE IF EXISTS consultations");
 } catch { /* nothing to migrate */ }
+
+const addColumn = (table, name, decl) => {
+  try {
+    if (db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === name)) return;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${decl}`);
+  } catch { /* table absent on a partial database; CREATE TABLE above already carries the column */ }
+};
+addColumn("lead", "est_annual_value", "REAL");
+addColumn("lead", "invoice_no", "TEXT");
+addColumn("content", "engagement_metric", "TEXT");
+addColumn("content", "engagement_value", "INTEGER");
 
 /* ---------- tiny query helpers ---------- */
 // node:sqlite rejects undefined and booleans; normalise once here rather than at every call site.
@@ -293,6 +333,13 @@ export const all = (sql, ...p) => db.prepare(sql).all(...norm(p));
 export const one = (sql, ...p) => db.prepare(sql).get(...norm(p)) ?? null;
 export const run = (sql, ...p) => db.prepare(sql).run(...norm(p));
 export const col = (sql, ...p) => { const r = one(sql, ...p); return r ? Object.values(r)[0] : null; };
+
+/** Run fn inside a transaction; anything it throws rolls the whole thing back. Do not nest. */
+export function tx(fn) {
+  db.exec("BEGIN");
+  try { const r = fn(); db.exec("COMMIT"); return r; }
+  catch (e) { db.exec("ROLLBACK"); throw e; }
+}
 
 export const getSetting = (k, dflt = null) => {
   const r = one("SELECT value FROM settings WHERE key=?", k);

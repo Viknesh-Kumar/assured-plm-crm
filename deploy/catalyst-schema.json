@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-30T18:53:56.814Z",
+  "generated": "2026-09-11T08:18:59.803Z",
   "tables": [
     {
       "table_name": "users",
@@ -544,6 +544,23 @@
           "column_name": "url",
           "data_type": "varchar",
           "max_length": 320,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "engagement_metric",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "engagement_value",
+          "data_type": "int",
           "is_mandatory": "false",
           "is_unique": "false",
           "search_index_enabled": "false",
@@ -1151,6 +1168,104 @@
           "data_type": "text",
           "is_mandatory": "false",
           "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "content_target",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "period",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "channel_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_channel",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "type_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_type",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "person_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "target",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "note",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
         }
       ]
     },
@@ -2205,6 +2320,24 @@
           "audit_consent": "false"
         },
         {
+          "column_name": "est_annual_value",
+          "data_type": "double",
+          "decimal_digits": 2,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "invoice_no",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
           "column_name": "primary_content_id",
           "data_type": "int",
           "is_mandatory": "false",
@@ -3178,6 +3311,59 @@
           "search_index_enabled": "false",
           "audit_consent": "false",
           "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "user_permission",
+      "composite_key": [
+        "user_id",
+        "permission"
+      ],
+      "columns": [
+        {
+          "column_name": "user_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "permission",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "granted_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "granted_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
         }
       ]
     },

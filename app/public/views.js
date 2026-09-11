@@ -21,7 +21,8 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 /* =================================================================== */
 export async function home() {
   const d = dash(), k = d.kpi || {};
-  const kpi = (cls, key, value, meta, href) => `<div class="kpi ${cls} ${href ? "click" : ""}" ${href ? `data-goto="${href}"` : ""}>
+  const kpi = (cls, key, value, meta, href) => `<div class="kpi ${cls} ${href ? "click" : ""}"
+    ${href ? `data-goto="${href}" tabindex="0" role="link"` : ""}>
     <div class="k">${esc(key)}</div><div class="v">${value}</div><div class="m">${esc(meta)}</div></div>`;
 
   const dist = (track, rows) => `<div class="dist">
@@ -165,7 +166,10 @@ export async function home() {
       </div>
     </div></main>`,
     mount() {
-      document.querySelectorAll("[data-goto]").forEach(el => el.onclick = () => go(el.dataset.goto.split("?")[0] + (el.dataset.goto.includes("?") ? "?" + el.dataset.goto.split("?")[1] : "")));
+      document.querySelectorAll("[data-goto]").forEach(el => {
+        el.onclick = () => go(el.dataset.goto);
+        el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.onclick(); } };
+      });
       document.querySelector('[data-act="new-product"]')?.addEventListener("click", newProduct);
       wireRows();
     }
@@ -404,10 +408,20 @@ function renderActions(p, det) {
   const isApprover = det.gate.isApprover;
 
   if (isDev && open && p.awaiting_approval && isApprover) {
-    btns.push(`<button class="btn success" data-a="approve">Approve gate</button>`);
+    // BR-09 — whoever marked the last criterion met may not also approve it.
+    if (det.gate.lastMarkedBy !== me().id)
+      btns.push(`<button class="btn success" data-a="approve">Approve gate</button>`);
+    else
+      btns.push(`<span class="note" style="align-self:center">You marked the last criterion met, so someone else
+        holding ${esc(p.approver_role || "the approver role")} must approve this gate (BR-09).</span>`);
     btns.push(`<button class="btn danger" data-a="return">Return</button>`);
+  } else if (isDev && open && !p.awaiting_approval && can("gate.submit") && det.gate.isOwner) {
+    btns.push(`<button class="btn brand" data-a="submit" ${p.gate_ready ? "" : "disabled"}>Submit for approval</button>`);
+    if (!p.gate_ready) btns.push(`<span class="note" style="align-self:center">${p.crit_total
+      ? `${p.crit_total - p.crit_met} of ${p.crit_total} exit criteria outstanding`
+      : "No exit criteria are defined for this gate — add them in Setup → Exit criteria"}</span>`);
   } else if (isDev && open && !p.awaiting_approval && can("gate.submit")) {
-    btns.push(`<button class="btn brand" data-a="submit" ${p.gate_ready ? "" : "disabled title='All exit criteria must be met first (BR-06)'"}>Submit for approval</button>`);
+    btns.push(`<span class="note" style="align-self:center">The ${esc(p.stage_owner_role || "stage owner")} moves this stage on.</span>`);
   }
   if (open && can("effort.log")) btns.push(`<button class="btn" data-a="effort">Log effort</button>`);
   if (open && can("deployment.record")) btns.push(`<button class="btn" data-a="deploy">New deployment</button>`);
@@ -610,7 +624,8 @@ function commercialTab(p, det) {
       { label: "Consultant", cell: e => esc(e.consultant_name || "—") },
       { label: "Source", cell: e => e.estimated ? `<span class="badge y">Estimated</span>` : `<span class="badge g">Logged</span>` },
       { label: "Note", cell: e => `<span class="trunc">${esc(e.note || "")}</span>` },
-      { label: "", align: "r", cell: e => can("effort.log") && open ? `<button class="btn sm danger" data-deleff="${e.id}">Remove</button>` : "" }
+      { label: "", align: "r", cell: e => open && can("effort.log") && (e.logged_by === me().id || can("settings.manage"))
+        ? `<button class="btn sm danger" data-deleff="${e.id}">Remove</button>` : "" }
     ], rows: det.effort, empty: "No effort has been logged. A gate cannot be approved without it (BR-21)."
   });
   const depTable = dataTable({
@@ -619,7 +634,10 @@ function commercialTab(p, det) {
       { label: "Date", cell: d => fmtDate(d.deployed_on) },
       { label: "Attributed revenue", align: "r", cell: d => money0(d.revenue) },
       { label: "Confirmed", cell: d => d.confirmed ? `<span class="badge g">${esc(d.confirmed_by_name || "confirmed")}</span>` : `<span class="badge y">Awaiting Finance Head</span>` },
-      { label: "", align: "r", cell: d => !d.confirmed && can("revenue.confirm") ? `<button class="btn sm success" data-confirm="${d.id}">Confirm</button>` : "" }
+      { label: "", align: "r", cell: d => d.confirmed ? "" : `<div class="btngroup">
+        ${can("revenue.confirm") ? `<button class="btn sm success" data-confirm="${d.id}">Confirm</button>` : ""}
+        ${can("deployment.record") && (d.created_by === me().id || can("settings.manage"))
+          ? `<button class="btn sm danger" data-deldep="${d.id}">Remove</button>` : ""}</div>` }
     ], rows: det.deployments, empty: "No deployment recorded. Market entry follows the first paid deployment (BR-11)."
   });
   const maxStage = Math.max(1, ...det.effortByStage.map(s => s.days));
@@ -752,6 +770,15 @@ function wireRecord(p, det) {
       toast("ok", "Revenue confirmed and now included in portfolio reporting."); await rerender(); }
     catch (e) { errToast(e); }
   });
+  document.querySelectorAll("[data-deldep]").forEach(b => b.onclick = () => confirmAction({
+    title: "Remove deployment", danger: true, submit: "Remove",
+    body: "The deployment and its attributed revenue are removed from this product. The removal is written to the "
+      + "audit trail. A deployment that carried the product into the market cannot be removed (BR-11).",
+    onConfirm: async () => {
+      await api(`/products/${p.id}/deployment/${b.dataset.deldep}`, { method: "DELETE" });
+      toast("ok", "Deployment removed."); await rerender();
+    }
+  }));
   document.querySelectorAll("[data-deleff]").forEach(b => b.onclick = () => confirmAction({
     title: "Remove effort entry", body: "This removes the entry from the product's cost side. The removal is written to the audit trail.",
     submit: "Remove", danger: true,
@@ -956,7 +983,13 @@ export function decideKill(p, det) {
         help: `Required when approving. Minimum ${setting("closure_reason_min", 50)} characters — it becomes the institutional record of what did not work and why.` }
     ],
     submit: "Record decision",
-    onSubmit: async d => { await api(`/products/${p.id}/kill/decide`, { method: "POST", body: d }); await after("Kill decision recorded."); }
+    onSubmit: async d => {
+      const min = Number(setting("closure_reason_min", 50));
+      if (d.decision === "Approved" && String(d.closure_reason || "").trim().length < min)
+        throw new Error(`Approving a kill needs a closure reason of at least ${min} characters (BR-25).`);
+      await api(`/products/${p.id}/kill/decide`, { method: "POST", body: d });
+      await after("Kill decision recorded.");
+    }
   });
 }
 
@@ -968,8 +1001,11 @@ export function changeMarket(p) {
       confirmed at the quarterly portfolio review. <b>BR-18</b> permits a return from Decline to Growth on evidence.`,
     fields: [
       { name: "seq", label: "New market state", type: "select", required: true,
-        options: stageList("market").map(s => ({ value: s.seq, label: `${s.name}${s.seq === 6 ? " — withdrawal, CEO decision" : ""}` })),
-        value: String(Math.min(6, (p.stage_seq || 0) + 1)) },
+        options: stageList("market")
+          .filter(st => st.seq === 6 ? can("kill.approve") : can("market.change"))
+          .map(st => ({ value: st.seq, label: `${st.name}${st.seq === 6 ? " — withdrawal, CEO decision" : ""}` })),
+        value: String(Math.min(6, (p.stage_seq || 0) + 1)),
+        help: can("kill.approve") ? undefined : "Withdrawal (Die) is a CEO decision and is not offered here." },
       { name: "review_ref", label: "Confirmed at", placeholder: "e.g. Q3 2026 portfolio review" },
       { name: "evidence", label: "Evidence", type: "textarea", required: true, minlength: 20, rows: 3, cols: "full",
         help: "Deployment and revenue evidence for the change. See RPT-08 for the threshold tests." },

@@ -4,6 +4,7 @@ import { db, all, one, run, col, setSetting } from "./db.mjs";
 import { seedIfEmpty, ROUTE_ENTRY } from "./seed.mjs";
 import { hashPassword, iso } from "./lib.mjs";
 
+
 seedIfEmpty();
 
 if (col("SELECT COUNT(*) FROM products")) {
@@ -125,26 +126,17 @@ const PORTFOLIO = [
 ];
 
 
-db.exec("BEGIN");
-try {
-  const roleId = n => col("SELECT id FROM roles WHERE name=?", n);
-  for (const [name, email, title, role] of DEMO_USERS) {
-    if (!col("SELECT id FROM users WHERE email=?", email))
-      run(`INSERT INTO users(name,email,title,password_hash,active,must_change,created_at)
-           VALUES(?,?,?,?,1,1,datetime('now'))`, name, email, title, hashPassword(pw));
-    run("INSERT OR IGNORE INTO user_roles(user_id,role_id) VALUES(?,?)",
-      col("SELECT id FROM users WHERE email=?", email), roleId(role));
-  }
-  seedPortfolio(roleId);
-  // The demo occupies P-001…P-015, so the next real product is P-016 (BR-01 never reuses an identifier).
-  setSetting("product_code_next", PORTFOLIO.length + 1);
-  db.exec("COMMIT");
-} catch (e) { db.exec("ROLLBACK"); throw e; }
 
-console.log(`\n  PLM demo data loaded: ${DEMO_USERS.length} role users and ` +
-  `${col("SELECT COUNT(*) FROM products")} products carrying ` +
-  `${col("SELECT ROUND(SUM(days),0) FROM effort_entries")} consultant days.`);
-console.log(`  Every demo account uses the password "${pw}" and is flagged must-change.\n`);
+const monthsBetween = (a, b) => {
+  const out = []; let [y, m] = a.split("-").map(Number); const [by, bm] = b.split("-").map(Number);
+  while (y < by || (y === by && m <= bm)) { out.push(`${y}-${String(m).padStart(2, "0")}`); m++; if (m > 12) { m = 1; y++; } }
+  return out.length ? out : [a];
+};
+const stageKeyAt = (p, ym) => {
+  let key = p.hist[0][1];
+  for (const [d, k] of p.hist) if (d.slice(0, 7) <= ym) key = k;
+  return key;
+};
 
 function seedPortfolio(roleId) {
   const userForRole = r => col(
@@ -244,18 +236,31 @@ function seedPortfolio(roleId) {
   }
 }
 
-const monthsBetween = (a, b) => {
-  const out = []; let [y, m] = a.split("-").map(Number); const [by, bm] = b.split("-").map(Number);
-  while (y < by || (y === by && m <= bm)) { out.push(`${y}-${String(m).padStart(2, "0")}`); m++; if (m > 12) { m = 1; y++; } }
-  return out.length ? out : [a];
-};
-const stageKeyAt = (p, ym) => {
-  let key = p.hist[0][1];
-  for (const [d, k] of p.hist) if (d.slice(0, 7) <= ym) key = k;
-  return key;
-};
+
 const minDate = (a, b) => (a < b ? a : b);
 const shiftMonths = (isoDate, n) => {
   const d = new Date(isoDate + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + n);
   return iso(d);
 };
+
+/* ---- the load itself, last: every `const` helper above it is then initialised ---- */
+db.exec("BEGIN");
+try {
+  const roleId = n => col("SELECT id FROM roles WHERE name=?", n);
+  for (const [name, email, title, role] of DEMO_USERS) {
+    if (!col("SELECT id FROM users WHERE email=?", email))
+      run(`INSERT INTO users(name,email,title,password_hash,active,must_change,created_at)
+           VALUES(?,?,?,?,1,1,datetime('now'))`, name, email, title, hashPassword(pw));
+    run("INSERT OR IGNORE INTO user_roles(user_id,role_id) VALUES(?,?)",
+      col("SELECT id FROM users WHERE email=?", email), roleId(role));
+  }
+  seedPortfolio(roleId);
+  // The demo occupies P-001…P-015, so the next real product is P-016 (BR-01 never reuses an identifier).
+  setSetting("product_code_next", PORTFOLIO.length + 1);
+  db.exec("COMMIT");
+} catch (e) { db.exec("ROLLBACK"); throw e; }
+
+console.log(`\n  PLM demo data loaded: ${DEMO_USERS.length} role users and ` +
+  `${col("SELECT COUNT(*) FROM products")} products carrying ` +
+  `${col("SELECT ROUND(SUM(days),0) FROM effort_entries")} consultant days.`);
+console.log(`  Every demo account uses the password "${pw}" and is flagged must-change.\n`);
