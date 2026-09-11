@@ -1,7 +1,8 @@
 # Assured PLM & CRM — one-page user manual
 
 Two applications, one sign-in. Switch with the waffle ⊞ at the top left.
-**https://plm-api-production.up.railway.app** · first sign-in `producthead@assured.local` / `Assured@2026` (change it immediately).
+Your administrator will give you the address and your own account. A first sign-in asks you to
+choose a new password before anything else.
 
 ---
 

@@ -12,8 +12,8 @@ Two applications over one database and one sign-in:
 - **PLM** — a product register with eight approval gates and six market states (BRD `AGC-BRD-PLM-001`).
 - **CRM & Content** — leads on configurable pipelines, plus a content calendar (BRD `AGC-BRD-CRM-001`).
 
-Live at **https://plm-api-production.up.railway.app** (Railway project `assured-plm-crm`,
-service `plm-api`, SQLite on the persistent volume `plm-data` mounted at `/data`).
+Deployed on Railway: one container, SQLite on a persistent volume mounted at `/data`. The project,
+service and URL are in the Railway dashboard — they are deliberately not written down here.
 
 ## 2. The one rule that governs the codebase
 
@@ -53,7 +53,7 @@ npm run reset             # delete the local database
 npm run demo              # 15 products, 16 leads, 22 content items, 4 targets
 npm test                  # both unit suites
 npm run smoke             # needs a server running; PLM_URL points it anywhere
-PLM_URL=https://plm-api-production.up.railway.app npm run smoke
+PLM_URL=https://<your-deployment> npm run smoke
 ```
 
 **The rules live on the server.** The browser may *display* a refusal; it must never *decide* one.
@@ -140,12 +140,14 @@ standing between an administrator and a permanent lockout. Do not route a new wr
 
 ## 10. Repository and deployment
 
-Private, code-only: `Viknesh-Kumar/assured-plm-crm`. The BRDs, the tracker workbook, the prototypes and
-the logo assets are deliberately gitignored — do not commit them.
+Code only. The BRDs, the tracker workbook, the prototypes and the logo assets are deliberately
+gitignored — do not commit them, and do not commit anything that identifies a live deployment.
 
-Railway deploys on push to `main` and runs `node app/server.mjs`. `PLM_DB=/data/assured.db` keeps the
-database on the volume; deleting that volume destroys the data and needs the user's explicit instruction.
-`/api/health` is unauthenticated and reports product and user counts.
+Railway deploys on push to `main` and runs `node app/server.mjs`. `PLM_DB` must point at a path on the
+persistent volume; deleting that volume destroys the data and needs the user's explicit instruction.
+`/api/health` is unauthenticated and reports only product and user counts.
 
-**Two Zoho OAuth tokens were pasted into an earlier chat transcript and should be treated as compromised.**
-Rotate them. Never write a credential to a file in this repository.
+**Never write a credential, a deployment URL or a token into this repository.** The bootstrap account's
+email and password come from `PLM_ADMIN_EMAIL` and `PLM_SEED_PASSWORD`; set both in the environment on
+any real deployment rather than relying on the defaults in `seed.mjs`, which are public knowledge.
+Two Zoho OAuth tokens were pasted into an earlier chat transcript and should be treated as compromised.
