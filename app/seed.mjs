@@ -5,10 +5,12 @@ import { hashPassword, iso, addWorkingDays } from "./lib.mjs";
 
 /**
  * Every grantable permission, as [key, label, module, group]. The module and group exist only so the
- * access editor can present two clearly separate columns — Product Lifecycle and CRM — which is what
- * makes "only a few may move a lead between stages" a thing an administrator can actually see and set.
+ * access editor can present one clearly separate column per application — Product Lifecycle, CRM and the
+ * Content Calendar — which is what makes "only a few may move a lead between stages" a thing an
+ * administrator can actually see and set. crm.content.manage keeps its first-release key; it opens the
+ * Content Calendar, not the CRM.
  */
-const PLM = "Product Lifecycle", CRM = "CRM & Content";
+const PLM = "Product Lifecycle", CRM = "CRM", CONTENT = "Content Calendar";
 export const PERMISSIONS = [
   ["product.create",    "Create product records",                         PLM, "Records"],
   ["product.edit",      "Edit product records",                           PLM, "Records"],
@@ -29,8 +31,10 @@ export const PERMISSIONS = [
   ["crm.lead.create",   "Add a new lead",                                 CRM, "Leads"],
   ["crm.lead.manage",   "Edit leads, attach content, mark lost or reopen", CRM, "Leads"],
   ["crm.lead.move",     "Move a lead between pipeline stages",            CRM, "Leads"],
-  ["crm.content.manage","Plan and publish content, and set targets",      CRM, "Content calendar"],
-  ["crm.setup.manage",  "Configure pipelines, stages and requirements",   CRM, "Administration"]
+  ["crm.setup.manage",  "Configure pipelines, stages and requirements",   CRM, "Administration"],
+  ["crm.content.manage","Plan content: map topics, work stages, publish and record figures", CONTENT, "Content"],
+  ["content.cadence.manage", "Set and revise the posting targets that write the calendar", CONTENT, "Targets"],
+  ["content.setup.manage", "Configure content types, stages, accounts, platforms, metrics and rules", CONTENT, "Administration"]
 ];
 
 const ROLES = [

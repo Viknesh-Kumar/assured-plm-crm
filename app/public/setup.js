@@ -137,8 +137,8 @@ const userTable = (users, rolePill, empty) => dataTable({
 });
 
 /**
- * Access, laid out the way an administrator thinks about it: Product Lifecycle on the left, CRM on the
- * right, grouped inside each. A tick a role already grants is shown checked and locked, with the role
+ * Access, laid out the way an administrator thinks about it: one column per application — Product Lifecycle,
+ * CRM, Content Calendar — grouped inside each. A tick a role already grants is shown checked and locked, with the role
  * named; every other tick is a grant to this person alone. The form only ever submits the extras.
  */
 function accessEditor(u, roles) {
@@ -421,7 +421,8 @@ function critForm(c, stageId) {
 /* SETTINGS / REFERENCE DATA                                            */
 /* =================================================================== */
 async function settingsTab() {
-  const meta = S.boot.settingsMeta.filter(s => s.kind !== "hidden");
+  // The Content Calendar's rules are configured, and checked, in its own Setup.
+  const meta = S.boot.settingsMeta.filter(s => s.kind !== "hidden" && !s.key.startsWith("content_"));
   const editable = meta.filter(s => s.key !== "product_code_next" && s.kind !== "json");
   return {
     html: `

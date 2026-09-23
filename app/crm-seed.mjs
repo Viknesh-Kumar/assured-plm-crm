@@ -9,7 +9,7 @@ export const CRM_PERMISSIONS = [
   ["crm.lead.create", "Add a new lead"],
   ["crm.lead.manage", "Edit leads, attach content, mark lost or reopen"],
   ["crm.lead.move", "Move a lead between pipeline stages"],
-  ["crm.content.manage", "Plan and publish content, and set publishing targets"],
+  ["crm.content.manage", "Plan content: map topics, work stages, publish and record figures"],
   ["crm.setup.manage", "Configure pipelines, stages, requirements and CRM reference data"]
 ];
 

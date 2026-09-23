@@ -1053,6 +1053,10 @@ export function deleteRole(user, id) {
   if (r.is_system) bad("The six roles named in the BRD are system roles and cannot be deleted. Edit their permissions instead.");
   const used = col("SELECT COUNT(*) FROM stages WHERE owner_role_id=? OR approver_role_id=? OR escalate_role_id=?", id, id, id);
   if (used) bad("This role is referenced by the stage model. Reassign those stages first.");
+  const owns = col("SELECT COUNT(*) FROM content_stage WHERE owner_role_id=?", id);
+  if (owns || Number(getSetting("content_manager_role")) === id)
+    bad(`This role ${owns ? `owns ${owns} stage${owns === 1 ? "" : "s"} in the Content Calendar's stage lists` : "runs the Content Calendar"}. `
+      + "Give that to another role in Content Calendar → Setup first.");
   tx(() => {
     run("DELETE FROM roles WHERE id=?", id);
     audit("role", id, "delete", `Role ${r.name} deleted`, user.id);
@@ -1103,7 +1107,8 @@ export function saveCriterion(user, b) {
 export function saveSettings(user, b) {
   need(user, "settings.manage");
   for (const [k, v] of Object.entries(b)) {
-    if (k === "app_secret") continue;
+    // The Content Calendar's rules are checked and saved by its own Setup (CC-08), never from here.
+    if (k === "app_secret" || k.startsWith("content_")) continue;
     const old = getSetting(k);
     if (old === null || String(old) === String(v)) continue;
     setSetting(k, v);

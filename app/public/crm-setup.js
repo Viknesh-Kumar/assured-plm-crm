@@ -403,7 +403,6 @@ function refForm(kind, row, lists) {
       value: String(row?.person_id || ""),
       options: [{ value: "", label: "— none —" }, ...(crm().people || []).map(p => ({ value: p.id, label: p.name }))] });
   }
-  if (kind === "content_channel") extra.push({ name: "colour", label: "Colour", value: row?.colour || "#5C5C5C" });
   if (kind === "offering") {
     extra.push({ name: "code", label: "Code", value: row?.code || "" });
     extra.push({ name: "revenue_category", label: "Revenue category", value: row?.revenue_category || "",

@@ -185,15 +185,14 @@ await BH.call(`/products/${p.id}/submit`, "POST");
 await CEO.call(`/products/${p.id}/decide`, "POST", { decision: "Approved" });
 eq((await ph.call(`/products/${p.id}`)).data.product.track, "development",
   "BR-11 gate 8 approval alone is not market entry");
-const promptsBefore = (await ph.call("/crm/prompts?status=Open")).data.length;
-ok(!(await ph.call("/crm/prompts?status=Open")).data.some(x => x.product_code === p.code),
+ok(!(await ph.call("/content/prompts?status=Open")).data.some(x => x.product_code === p.code),
   "no launch prompt for this product before it reaches Seeding");
 await BH.call(`/products/${p.id}/deployment`, "POST",
   { client_ref: "First paid client", deployed_on: new Date().toISOString().slice(0, 10), revenue: 60000 });
 const inMarket = (await ph.call(`/products/${p.id}`)).data.product;
 eq(inMarket.stage_name, "Seeding", "the first paid deployment moves the product into Seeding");
-const prompts = (await ph.call("/crm/prompts?status=Open")).data;
-ok(prompts.length >= 1, "Seeding raises a content-calendar prompt");
+const prompts = (await ph.call("/content/prompts?status=Open")).data;
+ok(prompts.length >= 1, "Seeding raises a Content Calendar prompt");
 ok(prompts.some(x => x.product_code === p.code), `the prompt names the product (${p.code})`);
 ok((await ML.call("/dashboard")).data.notifications.some(n => n.kind === "content"),
   "whoever plans content is notified");
@@ -225,39 +224,56 @@ ok(refusal.status === 400 && (refusal.data.missing || []).length === 6,
 ok(!(refusal.data.missing || []).some(m => m.key === "activity"),
   "BR-17 Activity Name is not asked for while the Lead Source is unknown");
 
-// Content: engagement, the Activity Name picker, and a publishing target.
-const crmRef = (await ph.call("/crm/bootstrap")).data;
-const liId = crmRef.contentChannels.find(c => c.name === "LinkedIn").id;
-const ctId = crmRef.contentTypes[0].id;
-const meId = (await ph.call("/bootstrap")).data.user.id;
-const today = new Date().toISOString().slice(0, 10);
-await refused(await ph.call("/crm/content", "POST",
-  { date: today, title: `No unit ${RUN}`, type_id: ctId, channel_id: liId, person_id: meId, engagement_value: 10 }),
-  "BR-38 an engagement number with no unit is refused", "unit");
-const post = (await ph.call("/crm/content", "POST", { date: today, title: `Racking teardown ${RUN}`,
-  type_id: ctId, channel_id: liId, person_id: meId, status: "Published",
-  engagement_metric: "Impressions", engagement_value: 12400 })).data;
-eq(post.engagement_value, 12400, "BR-38 engagement is recorded as a number with its unit");
-eq(post.engagement_metric, "Impressions", "BR-38 the engagement unit is one of Views, Likes, Impressions");
+console.log("\n  — the Content Calendar —");
+// A content type of this run's own keeps repeated runs against one deployment clear of each other.
+const cb = (await ph.call("/content/bootstrap")).data;
+ok(cb.can.setup && cb.can.cadence && cb.can.work, "the Product Head configures, targets and works the Content Calendar");
+const liId = cb.platforms.find(c => c.name === "LinkedIn").id;
+const assured = cb.accounts.find(a => a.name === "Assured").id;
+const ctype = (await ph.call("/content/types", "POST", { name: `Smoke explainer ${RUN}` })).data;
+await refused(await ph.call(`/content/types/${ctype.id}/stages`, "POST", { stages: [{ name: "Published", pct: 100, tat_days: 0, kind: "publish" }] }),
+  "CC-01 a stage list without a topic stage is refused", "CC-01");
+const list = (await ph.call(`/content/types/${ctype.id}/stages`, "POST", { stages: [
+  { name: "Topic mapped", pct: 10, tat_days: 14, kind: "topic" }, { name: "Draft written", pct: 60, tat_days: 3 },
+  { name: "Published", pct: 100, tat_days: 0, kind: "publish" }] })).data;
+eq(list.stages.map(s => `${s.pct}%/${s.tat_days}d`), ["10%/14d", "60%/3d", "100%/0d"], "a content type takes its stages, readiness and TATs");
+const later = n => { const d = new Date(Date.parse(cb.today) + n * 864e5); return d.toISOString().slice(0, 10); };
+const nextMonth = later(40).slice(0, 7);
+const tgt = { account_id: assured, type_id: ctype.id, platforms: [liId], per_month: 1, weeks: "2", weekdays: "3",
+  start_period: nextMonth, end_period: nextMonth };
+await refused(await ML.call("/content/targets", "POST", tgt), "CC-40 a sales user cannot set a posting target", "content.cadence.manage");
+eq((await ph.call("/content/targets/preview", "POST", tgt)).data.dates.length, 1, "a target's preview lists the dates it would write");
+const target = (await ph.call("/content/targets", "POST", tgt)).data;
+eq(target.created, 1, "saving the target writes its slot on the calendar");
+await refused(await ph.call("/content/targets", "POST", tgt), "CC-13 a second target on the same week and weekday is refused", "CC-13");
+const slot = (await ph.call(`/content/calendar?month=${nextMonth}`)).data.items.find(i => i.cadence_id === target.cadence.id);
+eq(slot?.state, "Open slot", "the slot waits for its topic");
+const post = (await ph.call("/content/items", "POST", { date: later(10), type_id: ctype.id, account_id: assured, platforms: [liId],
+  title: `Racking teardown ${RUN}`, theme: "Warehousing", keyword: "racking" })).data;
+eq([post.state, post.readiness], ["In production", 10], "a post planned with topic, theme and keyword is 10% ready");
+await refused(await ph.call(`/content/items/${post.id}/publish`, "POST", { urls: { [liId]: "https://www.linkedin.com/posts/x" } }),
+  "CC-25 publishing with a stage still open is refused", "Draft written");
+await ph.call(`/content/tasks/${post.tasks[1].id}/done`, "POST", {});
+const published = (await ph.call(`/content/items/${post.id}/publish`, "POST",
+  { urls: { [liId]: `https://www.linkedin.com/posts/racking-${RUN}` } })).data;
+eq([published.state, published.readiness], ["Published", 100], "with every stage done it publishes, 100% ready");
+const impressions = cb.metrics.find(m => m.name === "Impressions").id;
+eq((await ph.call(`/content/items/${post.id}/metrics`, "POST", { channel_id: liId, values: { [impressions]: "12,400" } })).data.latest[0].value,
+  12400, "CC-30 figures are recorded per platform as whole numbers");
 
+ok((await ph.call("/content/pickable")).data.some(x => x.value === post.id), "the post appears in the CRM's Activity Name picker");
+await refused(await ML.call(`/crm/leads/${lead.id}/attach`, "POST", { content_id: slot.id }),
+  "BR-33 an open slot cannot be attributed to a lead", "no topic");
 await ML.call(`/crm/leads/${lead.id}`, "PATCH", { activity: post.id });
 const withAct = (await ML.call(`/crm/leads/${lead.id}`)).data.lead;
-eq(withAct.activity, post.title, "the Activity Name is the content title, chosen from the calendar");
+eq(withAct.activity, post.title, "the Activity Name is the post's topic, chosen from the Content Calendar");
 eq(withAct.primary_content_id, post.id, "BR-33 the Activity Name carries the primary attribution");
 eq(withAct.activity_channel_name, "LinkedIn", "the social channel comes with the chosen post");
-
-const period = today.slice(0, 7);
-const targets = (await ph.call("/crm/targets", "POST",
-  { period, channel_id: liId, type_id: ctId, person_id: meId, target: 4 })).data;
-const myTarget = targets.find(t => t.period === period);
-eq(myTarget.target, 4, "BR-39 a publishing target is set for a month, channel, type and person");
-ok(myTarget.published >= 1, "BR-39 achievement is counted from the published content");
-await refused(await ph.call("/crm/targets", "POST",
-  { period, channel_id: liId, type_id: ctId, person_id: meId, target: 9 }),
-  "BR-39 a second target for the same quadruple is refused", "already set");
-await ph.call(`/crm/targets/${myTarget.id}`, "DELETE");
-ok(!((await ph.call(`/crm/targets?period=${period}`)).data.some(t => t.id === myTarget.id)),
-  "BR-39 a target can be removed");
+ok((await ph.call(`/content/scorecard?month=${later(10).slice(0, 7)}`)).data.rows.some(r => r.type === ctype.name),
+  "the scorecard measures the month the post went into");
+// Leave the deployment's calendar as it was found: the target ends before its month, its slot goes, the type retires.
+await ph.call(`/content/targets/${target.cadence.id}/end`, "POST", { last_period: cb.today.slice(0, 7) });
+await ph.call(`/content/types/${ctype.id}`, "PATCH", { name: ctype.name, active: false });
 await refused(await ML.call("/crm/pipelines", "POST", { name: "x", offering_id: off, template_id: 1, industry_ids: [ind] }),
   "FR-43 a Sales User is refused CRM Setup", "crm.setup.manage");
 ok((await ph.call("/crm/pipelines")).data.length >= 12, "the Product Head can reach CRM Setup");

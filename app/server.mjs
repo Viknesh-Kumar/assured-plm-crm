@@ -9,6 +9,7 @@ import { seedCRMIfEmpty, migrateCRM } from "./crm-seed.mjs";
 import { signSession, readSession, verifyPassword } from "./lib.mjs";
 import * as A from "./api.mjs";
 import * as C from "./crm.mjs";
+import * as CC from "./content.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, "public");
@@ -23,6 +24,8 @@ const SESSION_HOURS = 12;
 seedIfEmpty();
 seedCRMIfEmpty();
 migrateCRM();               // brings a database seeded by an earlier release up to the current catalogue
+const migrated = CC.migrateContentV2();     // the Content Calendar; a no-op once applied
+if (migrated) console.log(`  Content Calendar applied: ${migrated.items} items carried over.`);
 const SECRET = secret();
 
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
@@ -156,23 +159,6 @@ const routes = [
   ["POST", "/api/crm/leads/:id/attach",   ({ user, id, body })  => C.attachContent(user, id, body)],
   ["DELETE", "/api/crm/leads/:id/attach/:sub", ({ user, id, sub }) => C.detachContent(user, id, sub)],
 
-  ["GET",  "/api/crm/content",            ({ url })             => {
-    const y = Number(url.searchParams.get("y")), m = Number(url.searchParams.get("m"));
-    return y && m ? C.contentForMonth(y, m) : C.listContent();
-  }],
-  ["POST", "/api/crm/content",            ({ user, body })      => C.saveContent(user, null, body)],
-  ["GET",  "/api/crm/content/:id",        ({ user, id })        => C.contentDetail(user, id)],
-  ["PATCH", "/api/crm/content/:id",       ({ user, id, body })  => C.saveContent(user, id, body)],
-  ["DELETE", "/api/crm/content/:id",      ({ user, id })        => C.deleteContent(user, id)],
-
-  ["GET",  "/api/crm/targets",            ({ url })             => C.listTargets(url.searchParams.get("period") || null)],
-  ["POST", "/api/crm/targets",            ({ user, body })      => C.saveTarget(user, null, body)],
-  ["PATCH", "/api/crm/targets/:id",       ({ user, id, body })  => C.saveTarget(user, id, body)],
-  ["DELETE", "/api/crm/targets/:id",      ({ user, id })        => C.deleteTarget(user, id)],
-
-  ["GET",  "/api/crm/prompts",            ({ url })             => C.listPrompts(url.searchParams.get("status") || null)],
-  ["POST", "/api/crm/prompts/:id/dismiss", ({ user, id, body }) => C.dismissPrompt(user, id, body)],
-
   ["GET",  "/api/crm/reports",            ()                    => Object.entries(C.CRM_REPORTS).map(([k, r]) => ({ key: k, title: r.title, note: r.note }))],
   ["GET",  "/api/crm/reports/:key",       ({ params, url, res }) => {
     if (url.searchParams.get("format") === "csv") {
@@ -197,7 +183,58 @@ const routes = [
   ["GET",  "/api/crm/reference",          ()                    => C.referenceLists()],
   ["POST", "/api/crm/reference/:key",     ({ user, params, body }) => C.saveReference(user, params.key, body)],
   ["DELETE", "/api/crm/reference/:key/:id", ({ user, params, id }) => C.deleteReference(user, params.key, id)],
-  ["POST", "/api/crm/movement",           ({ user, body })      => C.saveMovementRules(user, body)]
+  ["POST", "/api/crm/movement",           ({ user, body })      => C.saveMovementRules(user, body)],
+
+  /* ------------------------------ Content Calendar ------------------------------ */
+  ["GET",  "/api/content/bootstrap",      ({ user })            => CC.contentBootstrap(user)],
+  ["GET",  "/api/content/calendar",       ({ url })             => CC.calendarView(url.searchParams.get("month") || CC.today().slice(0, 7))],
+  ["GET",  "/api/content/export",         ({ url, res })        => {
+    const period = url.searchParams.get("month") || CC.today().slice(0, 7);
+    const csv = CC.monthCSV(period);                       // refuses anything that is not YYYY-MM
+    send(res, 200, "﻿" + csv, { "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="content-calendar-${period}.csv"` });
+    return undefined;
+  }],
+  ["GET",  "/api/content/search",         ({ url })             => CC.searchItems(url.searchParams.get("q"))],
+  ["GET",  "/api/content/topics",         ()                    => CC.topicView()],
+  ["GET",  "/api/content/tasks",          ({ user, url })       => CC.taskList(user, { scope: url.searchParams.get("scope") === "all" ? "all" : "mine" })],
+  ["GET",  "/api/content/pickable",       ()                    => CC.pickableContent()],
+  ["POST", "/api/content/items",          ({ user, body })      => CC.createItem(user, body)],
+  ["GET",  "/api/content/items/:id",      ({ id })              => CC.itemDetail(id)],
+  ["DELETE", "/api/content/items/:id",    ({ user, id })        => CC.deleteItem(user, id)],
+  ["POST", "/api/content/items/:id/topic", ({ user, id, body }) => CC.mapTopic(user, id, body)],
+  ["POST", "/api/content/items/:id/parent", ({ user, id, body }) => CC.linkParent(user, id, Number(body.parent_id) || null)],
+  ["POST", "/api/content/items/:id/publish", ({ user, id, body }) => CC.publish(user, id, body)],
+  ["POST", "/api/content/items/:id/move", ({ user, id, body })  => CC.reschedule(user, id, body)],
+  ["POST", "/api/content/items/:id/cancel", ({ user, id, body }) => CC.cancelItem(user, id, body)],
+  ["POST", "/api/content/items/:id/metrics", ({ user, id, body }) => CC.recordMetrics(user, id, body)],
+  ["POST", "/api/content/tasks/:id/done", ({ user, id, body })  => CC.completeTask(user, id, body)],
+  ["POST", "/api/content/tasks/:id/reopen", ({ user, id, body }) => CC.reopenTask(user, id, body)],
+  ["GET",  "/api/content/targets",        ()                    => CC.listCadences()],
+  ["POST", "/api/content/targets/preview", ({ body })           => CC.previewCadence(body)],
+  ["POST", "/api/content/targets",        ({ user, body })      => CC.saveCadence(user, body)],
+  ["POST", "/api/content/targets/:id/revise", ({ user, id, body }) => CC.reviseCadence(user, id, body)],
+  ["POST", "/api/content/targets/:id/end", ({ user, id, body }) => CC.endCadence(user, id, body)],
+  ["GET",  "/api/content/scorecard",      ({ url })             => {
+    const period = url.searchParams.get("month") || CC.today().slice(0, 7);
+    return { period, rows: CC.scorecard(period), metrics: CC.metricsSummary(period) };
+  }],
+  ["GET",  "/api/content/prompts",        ({ url })             => C.listPrompts(url.searchParams.get("status") || null)],
+  ["POST", "/api/content/prompts/:id/dismiss", ({ user, id, body }) => C.dismissPrompt(user, id, body)],
+  ["POST", "/api/content/types",          ({ user, body })      => CC.saveType(user, null, body)],
+  ["PATCH", "/api/content/types/:id",     ({ user, id, body })  => CC.saveType(user, id, body)],
+  ["DELETE", "/api/content/types/:id",    ({ user, id })        => CC.deleteType(user, id)],
+  ["POST", "/api/content/types/:id/stages", ({ user, id, body }) => CC.saveStages(user, id, body.stages)],
+  ["POST", "/api/content/platforms",      ({ user, body })      => CC.savePlatform(user, null, body)],
+  ["PATCH", "/api/content/platforms/:id", ({ user, id, body })  => CC.savePlatform(user, id, body)],
+  ["DELETE", "/api/content/platforms/:id", ({ user, id })       => CC.deletePlatform(user, id)],
+  ["POST", "/api/content/accounts",       ({ user, body })      => CC.saveAccount(user, null, body)],
+  ["PATCH", "/api/content/accounts/:id",  ({ user, id, body })  => CC.saveAccount(user, id, body)],
+  ["POST", "/api/content/metrics",        ({ user, body })      => CC.saveMetric(user, null, body)],
+  ["PATCH", "/api/content/metrics/:id",   ({ user, id, body })  => CC.saveMetric(user, id, body)],
+  ["POST", "/api/content/holidays",       ({ user, body })      => CC.saveHoliday(user, body)],
+  ["DELETE", "/api/content/holidays/:date", ({ user, params })  => CC.deleteHoliday(user, params.date)],
+  ["POST", "/api/content/rules",          ({ user, body })      => CC.saveRules(user, body)]
 ];
 
 const compiled = routes.map(([method, pattern, handler, auth = true]) => {
@@ -234,6 +271,9 @@ export async function handle(req, res) {
     if (!route) throw new A.HttpError(404, "No such endpoint.");
     const user = currentUser(req);
     if (route.auth !== false && !user) throw new A.HttpError(401, "Not signed in.");
+    // Nothing in the app runs on a timer: the first signed-in request of each calendar day sends the
+    // content digest. It records the day, so every later request costs one settings read.
+    if (user) try { CC.dailyDigest(); } catch (e) { console.error("content digest:", e); }
 
     const m = pathname.match(route.rx);
     const params = Object.fromEntries(route.keys.map((k, i) => [k, m[i + 1]]));

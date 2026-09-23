@@ -10,6 +10,28 @@ export const DB_PATH = process.env.PLM_DB || path.join(here, "..", "plm.db");
 export const db = new DatabaseSync(DB_PATH);
 db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
 
+/** A content item, as the Content Calendar shapes it. A slot has a date but no topic yet, and one item may
+    go out on several platforms, so title, channel and person are optional. content.mjs rebuilds a table
+    of the first release (where they were NOT NULL) into this shape, keeping every id. */
+export const CONTENT_COLUMNS = `
+  id INTEGER PRIMARY KEY, date TEXT NOT NULL,
+  title TEXT,                                                  -- the topic; empty while the slot is open
+  type_id INTEGER NOT NULL REFERENCES content_type(id),
+  channel_id INTEGER REFERENCES content_channel(id),           -- the first platform, kept for the lead picker
+  person_id INTEGER REFERENCES users(id),                      -- accountable person; optional
+  account_id INTEGER REFERENCES content_account(id),
+  cadence_id INTEGER REFERENCES content_cadence(id),
+  slot_date TEXT,                                              -- the date the cadence gave it
+  parent_id INTEGER REFERENCES content(id),
+  offering_id INTEGER REFERENCES offering(id), industry_id INTEGER REFERENCES industry(id),
+  theme TEXT, keyword TEXT,
+  status TEXT NOT NULL DEFAULT 'Planned', url TEXT,            -- first-release fields, kept in step
+  engagement_metric TEXT, engagement_value INTEGER,            -- first-release fields, carried into content_metric_value
+  published_on TEXT, cancelled_at TEXT, cancel_reason TEXT,
+  orphaned INTEGER NOT NULL DEFAULT 0,                         -- its target was revised after work started
+  created_on TEXT, created_at TEXT NOT NULL, created_by INTEGER REFERENCES users(id),
+  UNIQUE (cadence_id, slot_date)`;
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS roles (
   id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, description TEXT,
@@ -257,18 +279,84 @@ CREATE TABLE IF NOT EXISTS lead_note (
   id INTEGER PRIMARY KEY, lead_id INTEGER NOT NULL REFERENCES lead(id) ON DELETE CASCADE,
   body TEXT NOT NULL, author_id INTEGER REFERENCES users(id), at TEXT NOT NULL);
 
-CREATE TABLE IF NOT EXISTS content (
-  id INTEGER PRIMARY KEY, date TEXT NOT NULL, title TEXT NOT NULL,
-  type_id INTEGER NOT NULL REFERENCES content_type(id),
+CREATE TABLE IF NOT EXISTS content (${CONTENT_COLUMNS});
+
+/* ============================ Content Calendar ============================
+   The third application. Targets write slots; each slot copies its type's stage list; due dates are
+   derived from the posting date and never stored. Rules and views: content.mjs.                      */
+
+CREATE TABLE IF NOT EXISTS content_account (
+  id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'Company',                        -- Company | Personal
+  person_id INTEGER REFERENCES users(id), colour TEXT,
+  active INTEGER NOT NULL DEFAULT 1, sort INTEGER DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS content_metric (
+  id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, help TEXT,
+  active INTEGER NOT NULL DEFAULT 1, sort INTEGER DEFAULT 0);
+
+-- The platforms a metric applies to. No rows = every platform (Instagram retired Impressions in April 2025).
+CREATE TABLE IF NOT EXISTS content_metric_platform (
+  metric_id INTEGER NOT NULL REFERENCES content_metric(id) ON DELETE CASCADE,
   channel_id INTEGER NOT NULL REFERENCES content_channel(id),
-  person_id INTEGER NOT NULL REFERENCES users(id),
-  offering_id INTEGER REFERENCES offering(id), industry_id INTEGER REFERENCES industry(id),
-  theme TEXT, status TEXT NOT NULL DEFAULT 'Planned', url TEXT,
-  engagement_metric TEXT, engagement_value INTEGER,
+  PRIMARY KEY (metric_id, channel_id));
+
+CREATE TABLE IF NOT EXISTS content_holiday (date TEXT PRIMARY KEY, name TEXT NOT NULL);
+
+-- The stage list of one content type. Copied onto each item when the item is created, then owned by it.
+CREATE TABLE IF NOT EXISTS content_stage (
+  id INTEGER PRIMARY KEY, type_id INTEGER NOT NULL REFERENCES content_type(id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL, name TEXT NOT NULL,
+  pct INTEGER NOT NULL,                                        -- readiness once this stage is done
+  tat_days INTEGER NOT NULL,                                   -- done this many days before posting
+  owner_role_id INTEGER REFERENCES roles(id),
+  kind TEXT NOT NULL DEFAULT 'work',                           -- topic | work | parent | publish
+  parent_stage_id INTEGER REFERENCES content_stage(id) ON DELETE SET NULL,
+  UNIQUE (type_id, seq));
+
+-- A posting target: account × content type × platforms, N a month in weeks W on weekdays D, month X to Y.
+CREATE TABLE IF NOT EXISTS content_cadence (
+  id INTEGER PRIMARY KEY,
+  account_id INTEGER NOT NULL REFERENCES content_account(id),
+  type_id INTEGER NOT NULL REFERENCES content_type(id),
+  per_month INTEGER NOT NULL, weeks TEXT NOT NULL, weekdays TEXT NOT NULL,   -- '1,3' · '2'
+  start_period TEXT NOT NULL, end_period TEXT NOT NULL,
+  note TEXT, active INTEGER NOT NULL DEFAULT 1,
+  replaced_by INTEGER REFERENCES content_cadence(id),
   created_at TEXT NOT NULL, created_by INTEGER REFERENCES users(id));
 
--- A publishing target: how many items of one (channel, type, person) should go out in one month.
--- Achievement is counted, never stored — it is the published content that matches the triple.
+CREATE TABLE IF NOT EXISTS content_cadence_platform (
+  cadence_id INTEGER NOT NULL REFERENCES content_cadence(id) ON DELETE CASCADE,
+  channel_id INTEGER NOT NULL REFERENCES content_channel(id),
+  PRIMARY KEY (cadence_id, channel_id));
+
+-- One content piece can go out on several platforms; each post has its own link and its own metrics.
+CREATE TABLE IF NOT EXISTS content_platform (
+  content_id INTEGER NOT NULL REFERENCES content(id) ON DELETE CASCADE,
+  channel_id INTEGER NOT NULL REFERENCES content_channel(id),
+  url TEXT, PRIMARY KEY (content_id, channel_id));
+
+-- The item's own copy of its stage list. Due dates are derived, never stored.
+CREATE TABLE IF NOT EXISTS content_task (
+  id INTEGER PRIMARY KEY, content_id INTEGER NOT NULL REFERENCES content(id) ON DELETE CASCADE,
+  stage_id INTEGER REFERENCES content_stage(id) ON DELETE SET NULL,
+  seq INTEGER NOT NULL, name TEXT NOT NULL, pct INTEGER NOT NULL, tat_days INTEGER NOT NULL,
+  owner_role_id INTEGER REFERENCES roles(id) ON DELETE SET NULL, kind TEXT NOT NULL,
+  parent_stage_id INTEGER REFERENCES content_stage(id) ON DELETE SET NULL,
+  done_at TEXT, done_on TEXT, done_by INTEGER REFERENCES users(id),
+  auto INTEGER NOT NULL DEFAULT 0, note TEXT,
+  UNIQUE (content_id, seq));
+
+CREATE TABLE IF NOT EXISTS content_metric_value (
+  id INTEGER PRIMARY KEY, content_id INTEGER NOT NULL REFERENCES content(id) ON DELETE CASCADE,
+  channel_id INTEGER NOT NULL REFERENCES content_channel(id),
+  metric_id INTEGER NOT NULL REFERENCES content_metric(id),
+  captured_on TEXT NOT NULL, value INTEGER NOT NULL, source TEXT NOT NULL DEFAULT 'manual',
+  recorded_at TEXT NOT NULL, recorded_by INTEGER REFERENCES users(id),
+  UNIQUE (content_id, channel_id, metric_id, captured_on));
+
+-- The first release's publishing targets: how many items of one (channel, type, person) went out in one
+-- month. Read-only history now — posting targets (content_cadence) replaced them.
 CREATE TABLE IF NOT EXISTS content_target (
   id INTEGER PRIMARY KEY, period TEXT NOT NULL,                                 -- YYYY-MM
   channel_id INTEGER NOT NULL REFERENCES content_channel(id),
@@ -295,6 +383,10 @@ CREATE INDEX IF NOT EXISTS ix_content_date ON content(date);
 CREATE INDEX IF NOT EXISTS ix_pstage_pipe  ON pipeline_stage(pipeline_id, seq);
 CREATE INDEX IF NOT EXISTS ix_prompt_stat  ON content_prompt(status);
 CREATE INDEX IF NOT EXISTS ix_target_per   ON content_target(period);
+CREATE INDEX IF NOT EXISTS ix_ctask_item   ON content_task(content_id, seq);
+CREATE INDEX IF NOT EXISTS ix_ctask_parent ON content_task(parent_stage_id);
+CREATE INDEX IF NOT EXISTS ix_cmv_item     ON content_metric_value(content_id, channel_id, metric_id);
+CREATE INDEX IF NOT EXISTS ix_cstage_type  ON content_stage(type_id, seq);
 
 CREATE INDEX IF NOT EXISTS ix_hist_prod   ON stage_history(product_id);
 CREATE INDEX IF NOT EXISTS ix_eff_prod    ON effort_entries(product_id);

@@ -19,7 +19,8 @@ const PERM_LABEL = Object.fromEntries(CRM_PERMISSIONS);
 const need = (u, p) => { if (!can(u, p)) deny(
   `You do not have access to: ${PERM_LABEL[p] || p} (${p}). Your roles are ${u.roleNames.join(", ") || "none"}. `
   + `An administrator can grant it in Setup → Users, either through a role or directly to you.`, "FR-43"); };
-export const hasCRM = u => CRM_PERMISSIONS.some(([p]) => u.permissions.includes(p));
+/** The CRM opens for lead and setup permissions. Planning content opens the Content Calendar, not the CRM. */
+export const hasCRM = u => CRM_PERMISSIONS.some(([p]) => p !== "crm.content.manage" && u.permissions.includes(p));
 
 const setting = (k, d) => { const v = getSetting(k); return v === null ? d : v; };
 const flag = (k, d) => String(setting(k, d)) === "1";
@@ -29,11 +30,6 @@ const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 /* ------------------------------------------------------------------ */
 /* reference data                                                      */
 /* ------------------------------------------------------------------ */
-export const LISTS = {
-  industry: "industry", customer_segment: "customer_segment", offering: "offering",
-  channel: "channel", content_type: "content_type", content_channel: "content_channel"
-};
-
 export function crmBootstrap(user) {
   return {
     industries: all("SELECT * FROM industry ORDER BY sort, name"),
@@ -306,8 +302,7 @@ function setActivity(user, leadId, before, raw) {
     return true;
   }
 
-  const c = getContent(cid);
-  if (!c) refuse("BR-33", "That content item no longer exists. Pick another from the Content Calendar.");
+  const c = attributable(cid);
   if (before.primary_content_id === cid && before.activity === c.title) return false;
   run("UPDATE lead SET activity=?, primary_content_id=? WHERE id=?", c.title, cid, leadId);
   run(`INSERT INTO lead_content_touch(lead_id,content_id,is_primary,added_at,added_by)
@@ -464,12 +459,15 @@ export function leadDetail(user, id) {
     fields: activeFields(),
     history: all(`SELECT h.*, u.name AS actor_name FROM lead_stage_history h
                   LEFT JOIN users u ON u.id=h.actor_id WHERE h.lead_id=? ORDER BY h.id DESC`, id),
-    touches: all(`SELECT t.*, c.title, c.date, c.status, ct.name AS type_name, cc.name AS channel_name,
-                    cc.colour, p.name AS person_name
+    touches: all(`SELECT t.*, c.title, c.date, ct.name AS type_name, a.name AS account_name, cc.colour,
+                    CASE WHEN c.published_on IS NOT NULL THEN 'Published' WHEN c.cancelled_at IS NOT NULL THEN 'Cancelled'
+                      ELSE 'Planned' END AS status,
+                    (SELECT group_concat(ch.name, ', ') FROM content_platform cp JOIN content_channel ch ON ch.id=cp.channel_id
+                      WHERE cp.content_id=c.id) AS channel_name
                   FROM lead_content_touch t JOIN content c ON c.id=t.content_id
                   LEFT JOIN content_type ct ON ct.id=c.type_id
+                  LEFT JOIN content_account a ON a.id=c.account_id
                   LEFT JOIN content_channel cc ON cc.id=c.channel_id
-                  LEFT JOIN users p ON p.id=c.person_id
                   WHERE t.lead_id=? ORDER BY c.date DESC`, id),
     notes: all(`SELECT n.*, u.name AS author_name FROM lead_note n LEFT JOIN users u ON u.id=n.author_id
                 WHERE n.lead_id=? ORDER BY n.id DESC`, id),
@@ -479,95 +477,26 @@ export function leadDetail(user, id) {
 }
 
 /* ------------------------------------------------------------------ */
-/* content                                                             */
+/* content attribution — the items live in the Content Calendar         */
 /* ------------------------------------------------------------------ */
-const CONTENT_SQL = `
-SELECT c.*, ct.name AS type_name, cc.name AS channel_name, cc.colour, p.name AS person_name,
-  o.name AS offering_name, i.name AS industry_name,
-  (SELECT COUNT(*) FROM lead_content_touch t WHERE t.content_id=c.id) AS lead_count,
-  (SELECT COUNT(*) FROM lead_content_touch t WHERE t.content_id=c.id AND t.is_primary=1) AS primary_count
-FROM content c
-LEFT JOIN content_type ct ON ct.id=c.type_id
-LEFT JOIN content_channel cc ON cc.id=c.channel_id
-LEFT JOIN users p ON p.id=c.person_id
-LEFT JOIN offering o ON o.id=c.offering_id
-LEFT JOIN industry i ON i.id=c.industry_id`;
+// Planning, stages, publishing and figures are the Content Calendar's (content.mjs). The CRM only reads
+// an item to attribute a lead to it.
+export const getContent = id => one(`SELECT c.*, ct.name AS type_name, a.name AS account_name FROM content c
+  LEFT JOIN content_type ct ON ct.id=c.type_id LEFT JOIN content_account a ON a.id=c.account_id WHERE c.id=?`, id);
 
-export const getContent = id => one(`${CONTENT_SQL} WHERE c.id=?`, id);
-export const listContent = () => all(`${CONTENT_SQL} ORDER BY c.date DESC`);
-export const contentForMonth = (y, m) => all(
-  `${CONTENT_SQL} WHERE c.date >= ? AND c.date < ? ORDER BY c.date, c.id`,
-  `${y}-${String(m).padStart(2, "0")}-01`,
-  m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`);
-
-const STATUSES = ["Planned", "Drafted", "Scheduled", "Published"];
-/** How engagement on a post is counted. One number, and the unit it is counted in. */
-export const METRICS = ["Views", "Likes", "Impressions"];
-
-/** A number and its unit; neither half says anything on its own. Returns [metric, value]. */
-function readEngagement(b) {
-  const metric = String(b.engagement_metric ?? "").trim();
-  const raw = b.engagement_value;
-  const hasValue = !(raw === "" || raw === null || raw === undefined);
-  if (metric && !METRICS.includes(metric))
-    refuse("BR-38", `Engagement is counted in ${METRICS.join(", ")} — "${metric}" is not one of them.`);
-  if (hasValue && !metric)
-    refuse("BR-38", "An engagement number needs a unit beside it. Choose Views, Likes or Impressions.");
-  if (metric && !hasValue)
-    refuse("BR-38", `"${metric}" needs a number beside it, or clear the unit.`);
-  if (!hasValue) return [null, null];
-  const value = Number(String(raw).replace(/[,\s]/g, ""));
-  if (!Number.isFinite(value) || value < 0 || Math.floor(value) !== value)
-    refuse("BR-38", "Engagement is a whole number of zero or more.");
-  return [metric, value];
+/** BR-33 — a lead comes from a post that has a topic and was not cancelled; an open slot is not one yet. */
+function attributable(id) {
+  const c = getContent(id);
+  if (!c) refuse("BR-33", "That content item no longer exists. Pick another from the Content Calendar.");
+  if (!c.title) refuse("BR-33", `The ${c.type_name || "content"} slot on ${c.date} has no topic yet, so no lead can `
+    + "have come from it. Its topic is mapped on the Content Calendar first.");
+  if (c.cancelled_at) refuse("BR-33", `"${c.title}" was cancelled, so no lead can have come from it.`);
+  return c;
 }
-
-/** BR-31, BR-32, BR-38 */
-export function saveContent(user, id, b) {
-  need(user, "crm.content.manage");
-  const missing = [];
-  if (!String(b.date ?? "").trim()) missing.push("Date");
-  if (!String(b.title ?? "").trim()) missing.push("Title");
-  if (!b.type_id) missing.push("Content type");
-  if (!b.channel_id) missing.push("Channel");
-  if (!b.person_id) missing.push("Person");
-  if (missing.length)
-    refuse("BR-31", `A content item needs ${missing.join(", ")}. Without them it cannot be planned or attributed.`);
-  const status = STATUSES.includes(b.status) ? b.status : "Planned";
-  if (status === "Published" && String(b.date) > today())
-    refuse("BR-32", `"${b.title}" is dated ${b.date}, which is in the future. It cannot be marked Published yet.`);
-  const [metric, value] = readEngagement(b);
-
-  if (id) {
-    const ex = getContent(id) || gone("Content not found.");
-    run(`UPDATE content SET date=?,title=?,type_id=?,channel_id=?,person_id=?,offering_id=?,industry_id=?,
-           theme=?,status=?,url=?,engagement_metric=?,engagement_value=? WHERE id=?`,
-      b.date, String(b.title).trim(), b.type_id, b.channel_id, b.person_id,
-      b.offering_id || null, b.industry_id || null, b.theme || null, status, b.url || null, metric, value, id);
-    audit("content", id, "update", `Content "${b.title}" updated`, user.id, "status", ex.status, status);
-    // The title is snapshotted onto every lead that picked it as its Activity Name; keep them in step.
-    run("UPDATE lead SET activity=? WHERE primary_content_id=?", String(b.title).trim(), id);
-  } else {
-    run(`INSERT INTO content(date,title,type_id,channel_id,person_id,offering_id,industry_id,theme,status,url,
-           engagement_metric,engagement_value,created_at,created_by)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?)`,
-      b.date, String(b.title).trim(), b.type_id, b.channel_id, b.person_id,
-      b.offering_id || null, b.industry_id || null, b.theme || null, status, b.url || null, metric, value, user.id);
-    id = col("SELECT MAX(id) FROM content");
-    audit("content", id, "create", `Content "${b.title}" planned for ${b.date}`, user.id);
-    if (b.prompt_id) resolvePrompt(user, Number(b.prompt_id), id);
-  }
-  return getContent(id);
-}
-
-/* ------------------------------------------------------------------ */
-/* publishing targets                                                  */
-/* ------------------------------------------------------------------ */
-const PERIOD_RX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /**
- * Targets for one month, each carrying what has actually been published against it. Achievement is
- * counted from the content itself and never stored, so it can never drift from the calendar.
+ * The first release's publishing targets, each with what was published against it. Read-only history:
+ * posting targets in the Content Calendar replaced them. Achievement is counted, never stored.
  */
 export function listTargets(period) {
   const rows = all(`SELECT t.*, cc.name AS channel_name, cc.colour, ct.name AS type_name, u.name AS person_name
@@ -595,65 +524,11 @@ function monthBounds(period) {
   return [`${y}-${pad(m)}-01`, m === 12 ? `${y + 1}-01-01` : `${y}-${pad(m + 1)}-01`];
 }
 
-/** BR-39 — a target is a (month, channel, content type, person) quadruple, and it is unique. */
-export function saveTarget(user, id, b) {
-  need(user, "crm.content.manage");
-  const period = String(b.period ?? "").trim();
-  if (!PERIOD_RX.test(period)) refuse("BR-39", "A target is set for one month, written as YYYY-MM.");
-  const need4 = [["channel_id", "Channel"], ["type_id", "Content type"], ["person_id", "Person"]]
-    .filter(([k]) => !b[k]).map(([, l]) => l);
-  if (need4.length)
-    refuse("BR-39", `A target needs ${need4.join(", ")}. A target is how many items one person publishes `
-      + "of one content type on one channel in one month.");
-  const target = Number(b.target);
-  if (!Number.isFinite(target) || target < 1 || Math.floor(target) !== target)
-    refuse("BR-39", "A target is a whole number of one or more.");
-
-  const clash = one(`SELECT id FROM content_target WHERE period=? AND channel_id=? AND type_id=? AND person_id=? AND id<>?`,
-    period, b.channel_id, b.type_id, b.person_id, id || 0);
-  if (clash) refuse("BR-39", "A target is already set for that person, channel and content type in that month. "
-    + "Edit it rather than adding a second.");
-
-  if (id) {
-    one("SELECT id FROM content_target WHERE id=?", id) || gone("Target not found.");
-    run(`UPDATE content_target SET period=?,channel_id=?,type_id=?,person_id=?,target=?,note=? WHERE id=?`,
-      period, b.channel_id, b.type_id, b.person_id, target, b.note || null, id);
-    audit("content_target", id, "update", `Publishing target updated for ${period}`, user.id);
-  } else {
-    run(`INSERT INTO content_target(period,channel_id,type_id,person_id,target,note,created_at,created_by)
-         VALUES(?,?,?,?,?,?,datetime('now'),?)`,
-      period, b.channel_id, b.type_id, b.person_id, target, b.note || null, user.id);
-    id = col("SELECT MAX(id) FROM content_target");
-    audit("content_target", id, "create", `Publishing target of ${target} set for ${period}`, user.id);
-  }
-  return listTargets(period);
-}
-
-export function deleteTarget(user, id) {
-  need(user, "crm.content.manage");
-  const t = one("SELECT * FROM content_target WHERE id=?", id) || gone("Target not found.");
-  run("DELETE FROM content_target WHERE id=?", id);
-  audit("content_target", id, "delete", `Publishing target for ${t.period} removed`, user.id);
-  return listTargets(t.period);
-}
-
-/** BR-34 */
-export function deleteContent(user, id) {
-  need(user, "crm.content.manage");
-  const c = getContent(id) || gone("Content not found.");
-  const n = col("SELECT COUNT(*) FROM lead_content_touch WHERE content_id=?", id);
-  if (n) refuse("BR-34", `"${c.title}" is attributed to ${n} lead${n === 1 ? "" : "s"} and cannot be deleted. `
-    + "Detach it from those leads first, or leave it in place as the record of where they came from.");
-  run("DELETE FROM content WHERE id=?", id);
-  audit("content", id, "delete", `Content "${c.title}" deleted`, user.id);
-  return { ok: true };
-}
-
 /** BR-33 — one primary, unlimited touches; the primary is always also a touch. */
 export function attachContent(user, leadId, b) {
   need(user, "crm.lead.manage");
   const l = mustLead(leadId);
-  const c = getContent(Number(b.content_id)) || gone("Content not found.");
+  const c = attributable(Number(b.content_id));
   run(`INSERT INTO lead_content_touch(lead_id,content_id,is_primary,added_at,added_by)
        VALUES(?,?,0,datetime('now'),?) ON CONFLICT(lead_id,content_id) DO NOTHING`, leadId, c.id, user.id);
   if (b.primary) {
@@ -675,15 +550,6 @@ export function detachContent(user, leadId, contentId) {
   audit("lead", leadId, "content", `${l.company}: content detached`, user.id);
   return leadDetail(user, leadId);
 }
-
-export const contentDetail = (user, id) => ({
-  content: getContent(id) || gone("Content not found."),
-  leads: all(`SELECT l.id, l.company, l.lost, t.is_primary, s.name AS stage_name, s.band
-              FROM lead_content_touch t JOIN lead l ON l.id=t.lead_id
-              LEFT JOIN pipeline_stage s ON s.id=l.stage_id
-              WHERE t.content_id=? ORDER BY t.is_primary DESC, l.company`, id),
-  prompt: one("SELECT * FROM content_prompt WHERE content_id=?", id)
-});
 
 /* ------------------------------------------------------------------ */
 /* content prompts — the PLM hand-off                                  */
@@ -754,31 +620,22 @@ export function crmDashboard(user) {
     (byChannel[k] ||= { name: k, mode: l.channel_mode || "—", n: 0 }).n++;
   });
   const blocked = open.filter(l => Array.isArray(l.missing) && l.missing.length);
-  const prompts = listPrompts("Open");
-  const period = today().slice(0, 7);
-  const targets = listTargets(period);
   const sum = (rows, k) => rows.reduce((n, r) => n + (Number(r[k]) || 0), 0);
   return {
     kpi: {
       open: open.length, total: leads.length, lost: lost.length,
       past_qualification: open.filter(l => l.stage_band && l.stage_band !== "Lead").length,
       attributed: leads.filter(l => l.primary_content_id).length,
-      published: col("SELECT COUNT(*) FROM content WHERE status='Published'"),
+      published: col("SELECT COUNT(*) FROM content WHERE published_on IS NOT NULL"),
       blocked: blocked.length,
       unassigned: leads.filter(l => !l.pipeline_id).length,
-      content: col("SELECT COUNT(*) FROM content"),
-      prompts: prompts.length,
       pipeline_value: sum(open, "est_annual_value"),
-      won_value: sum(open.filter(l => l.stage_band === "Closed"), "est_annual_value"),
-      target_total: sum(targets, "target"),
-      target_published: sum(targets, "published")
+      won_value: sum(open.filter(l => l.stage_band === "Closed"), "est_annual_value")
     },
-    period, targets,
     bands: bandCounts, lostCount: lost.length,
     channels: Object.values(byChannel).sort((a, b) => b.n - a.n),
     blocked: blocked.slice(0, 20),
     attributedLeads: leads.filter(l => l.primary_content_id).slice(0, 20),
-    prompts,
     recent: all(`SELECT h.*, l.company, u.name AS actor_name FROM lead_stage_history h
                  JOIN lead l ON l.id=h.lead_id LEFT JOIN users u ON u.id=h.actor_id
                  ORDER BY h.id DESC LIMIT 12`)
@@ -821,23 +678,26 @@ export const CRM_REPORTS = {
   "CRM-03": {
     title: "Content attribution", note: "Per content item: leads produced and how far they got. Primary attribution and contributing touches are counted separately (Finding 6).",
     build: () => {
-      const rows = all(`SELECT c.id, c.date, c.title, ct.name AS type, cc.name AS channel, p.name AS person
+      // Every post with a topic; an open slot has nothing a lead could have come from.
+      const rows = all(`SELECT c.id, c.date, c.title, ct.name AS type, a.name AS account,
+                          (SELECT group_concat(ch.name, ', ') FROM content_platform cp JOIN content_channel ch ON ch.id=cp.channel_id
+                            WHERE cp.content_id=c.id) AS platforms
                         FROM content c LEFT JOIN content_type ct ON ct.id=c.type_id
-                        LEFT JOIN content_channel cc ON cc.id=c.channel_id
-                        LEFT JOIN users p ON p.id=c.person_id ORDER BY c.date DESC`)
+                        LEFT JOIN content_account a ON a.id=c.account_id
+                        WHERE c.title IS NOT NULL ORDER BY c.date DESC`)
         .map(c => {
           const touches = all(`SELECT t.is_primary, s.band FROM lead_content_touch t
                                JOIN lead l ON l.id=t.lead_id LEFT JOIN pipeline_stage s ON s.id=l.stage_id
                                WHERE t.content_id=?`, c.id);
           return {
-            Date: c.date, Content: c.title, Type: c.type, Channel: c.channel, Person: c.person,
+            Date: c.date, Content: c.title, Type: c.type, Platforms: c.platforms || "—", Account: c.account || "—",
             "Leads (primary)": touches.filter(t => t.is_primary).length,
             "Leads (touched)": touches.length,
             "Past qualification": touches.filter(t => t.band && t.band !== "Lead").length,
             Won: touches.filter(t => t.band === "Closed").length
           };
-        }).filter(r => r["Leads (touched)"] > 0 || true);
-      return { columns: cols(rows, ["Date", "Content", "Type", "Channel", "Person", "Leads (primary)",
+        });
+      return { columns: cols(rows, ["Date", "Content", "Type", "Platforms", "Account", "Leads (primary)",
         "Leads (touched)", "Past qualification", "Won"]), rows };
     }
   },
@@ -893,23 +753,6 @@ export const CRM_REPORTS = {
       return { columns: cols(rows, ["Field", "Leads blocked", "Required at", "Conditional"]), rows };
     }
   },
-  "CRM-07": {
-    title: "Content plan", note: "Planned against published by person, channel and type, per month.",
-    build: () => {
-      const by = {};
-      for (const c of all(`SELECT c.date, c.status, p.name AS person, cc.name AS channel, ct.name AS type
-                           FROM content c LEFT JOIN users p ON p.id=c.person_id
-                           LEFT JOIN content_channel cc ON cc.id=c.channel_id
-                           LEFT JOIN content_type ct ON ct.id=c.type_id ORDER BY c.date`)) {
-        const k = `${c.date.slice(0, 7)}|${c.person}|${c.channel}|${c.type}`;
-        (by[k] ||= { Month: c.date.slice(0, 7), Person: c.person, Channel: c.channel, Type: c.type,
-          Planned: 0, Drafted: 0, Scheduled: 0, Published: 0 });
-        by[k][c.status] = (by[k][c.status] || 0) + 1;
-      }
-      const rows = Object.values(by);
-      return { columns: cols(rows, ["Month", "Person", "Channel", "Type", "Planned", "Drafted", "Scheduled", "Published"]), rows };
-    }
-  },
   "CRM-08": {
     title: "Stage history export", note: "The full immutable movement trail (BR-24).",
     build: () => {
@@ -923,8 +766,8 @@ export const CRM_REPORTS = {
     }
   },
   "CRM-09": {
-    title: "Targets against published",
-    note: "Every publishing target and what was actually published against it. A target is one person, one channel, one content type, one month (BR-39). Achievement is counted from the calendar, so it cannot drift.",
+    title: "Publishing targets (first release, history)",
+    note: "The one-month, one-person targets set before posting targets replaced them — read-only history, with what was published against each. Targets are now set in the Content Calendar, and its scorecard measures them.",
     build: () => {
       const rows = listTargets(null).map(t => ({
         Month: t.period, Person: t.person_name || "—", Channel: t.channel_name || "—",
@@ -934,29 +777,6 @@ export const CRM_REPORTS = {
       }));
       return { columns: cols(rows, ["Month", "Person", "Channel", "Content type", "Target", "Planned",
         "Published", "Against target", "Standing"]), rows };
-    }
-  },
-  "CRM-10": {
-    title: "Engagement by post",
-    note: "The engagement recorded against each published item, with the leads it produced beside it. The number and its unit are recorded together — a count without a unit is refused (BR-38).",
-    build: () => {
-      const rows = all(`SELECT c.id, c.date, c.title, c.status, c.engagement_metric, c.engagement_value,
-                          ct.name AS type, cc.name AS channel, p.name AS person
-                        FROM content c
-                        LEFT JOIN content_type ct ON ct.id=c.type_id
-                        LEFT JOIN content_channel cc ON cc.id=c.channel_id
-                        LEFT JOIN users p ON p.id=c.person_id
-                        ORDER BY c.engagement_value DESC, c.date DESC`)
-        .map(c => ({
-          Date: c.date, Content: c.title, Channel: c.channel || "—", Type: c.type || "—",
-          Person: c.person || "—", Status: c.status,
-          Measure: c.engagement_metric || "not recorded",
-          Engagement: c.engagement_value ?? "",
-          "Leads (primary)": col("SELECT COUNT(*) FROM lead_content_touch WHERE content_id=? AND is_primary=1", c.id),
-          "Leads (touched)": col("SELECT COUNT(*) FROM lead_content_touch WHERE content_id=?", c.id)
-        }));
-      return { columns: cols(rows, ["Date", "Content", "Channel", "Type", "Person", "Status", "Measure",
-        "Engagement", "Leads (primary)", "Leads (touched)"]), rows };
     }
   }
 };
@@ -1161,10 +981,9 @@ const REF_TABLES = {
   industry: { table: "industry", label: "Industry", uses: [["lead", "industry_id"], ["pipeline_industry", "industry_id"], ["content", "industry_id"]] },
   customer_segment: { table: "customer_segment", label: "Customer segment", uses: [["lead", "segment_id"]] },
   offering: { table: "offering", label: "Offering", uses: [["lead", "offering_id"], ["pipeline", "offering_id"], ["content", "offering_id"]] },
-  channel: { table: "channel", label: "Channel", uses: [["lead", "channel_id"]] },
-  content_type: { table: "content_type", label: "Content type", uses: [["content", "type_id"]] },
-  content_channel: { table: "content_channel", label: "Content channel", uses: [["content", "channel_id"]] }
+  channel: { table: "channel", label: "Channel", uses: [["lead", "channel_id"]] }
 };
+// Content types and platforms are the Content Calendar's own lists, configured in its Setup (content.mjs).
 
 export const refUsage = (kind, id) => (REF_TABLES[kind]?.uses || [])
   .reduce((n, [t, c]) => n + col(`SELECT COUNT(*) FROM ${t} WHERE ${c}=?`, id), 0);
@@ -1177,11 +996,9 @@ export function saveReference(user, kind, b) {
   if (b.id) {
     const ex = one(`SELECT * FROM ${def.table} WHERE id=?`, b.id) || gone("Value not found.");
     const active = b.active === undefined ? ex.active : (b.active ? 1 : 0);
-    const extra = kind === "channel" ? ", mode=?, person_id=?" : kind === "content_channel" ? ", colour=?" :
-      kind === "offering" ? ", revenue_category=?" : "";
+    const extra = kind === "channel" ? ", mode=?, person_id=?" : kind === "offering" ? ", revenue_category=?" : "";
     const args = kind === "channel" ? [b.mode || ex.mode, b.person_id || null]
-      : kind === "content_channel" ? [b.colour || ex.colour]
-        : kind === "offering" ? [b.revenue_category ?? ex.revenue_category] : [];
+      : kind === "offering" ? [b.revenue_category ?? ex.revenue_category] : [];
     run(`UPDATE ${def.table} SET name=?, active=?${extra} WHERE id=?`, name, active, ...args, b.id);
     audit(kind, b.id, "update", `${def.label} "${name}" updated`, user.id, "active", ex.active, active);
     if (kind === "channel" && b.mode && b.mode !== ex.mode) {
@@ -1191,9 +1008,8 @@ export function saveReference(user, kind, b) {
   } else {
     const codeCol = kind === "offering" ? ", code" : "";
     const codeVal = kind === "offering" ? [String(b.code || name.slice(0, 3)).toUpperCase()] : [];
-    const extraCol = kind === "channel" ? ", mode, person_id" : kind === "content_channel" ? ", colour" : "";
-    const extraVal = kind === "channel" ? [b.mode || "Offline", b.person_id || null]
-      : kind === "content_channel" ? [b.colour || "#5C5C5C"] : [];
+    const extraCol = kind === "channel" ? ", mode, person_id" : "";
+    const extraVal = kind === "channel" ? [b.mode || "Offline", b.person_id || null] : [];
     run(`INSERT INTO ${def.table}(name, active${codeCol}${extraCol}, sort)
          VALUES(?,1${codeVal.length ? ",?" : ""}${extraVal.map(() => ",?").join("")},
                 (SELECT COALESCE(MAX(sort),0)+1 FROM ${def.table}))`, name, ...codeVal, ...extraVal);

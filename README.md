@@ -1,19 +1,21 @@
-# Assured — Product Lifecycle & CRM
+# Assured — Product Lifecycle, CRM and Content Calendar
 
-One application, two modules, one user directory.
+One application, three modules, one user directory.
 
 | Module | Built to | What it does |
 |---|---|---|
 | **Product Lifecycle** | BRD **AGC-BRD-PLM-001** v1.0 + `plm-prototype.html` | Internal products from first idea to formal withdrawal, across eight approval gates and six market states |
-| **CRM & Content Calendar** | BRD **AGC-BRD-CRM-001** v1.0 + `Assured CRM/crm-prototype.html` | Leads against configurable sales processes, the content calendar, and the attribution between them |
+| **CRM** | BRD **AGC-BRD-CRM-001** v1.0 + `Assured CRM/crm-prototype.html` | Leads against configurable sales processes, and the post each lead came from |
+| **Content Calendar** | The re-imagined process (`content-v2/`, flowchart and prototype, September 2026) | Posting targets that write the calendar, topics mapped ahead, stages with readiness and turnaround times that become tasks, publishing and per-platform figures |
 
-They share sign-in, the user directory, roles and permissions, the audit trail and notifications.
-Switch between them from the app name in the navigation bar, or the app launcher in the header.
+They share sign-in, the user directory, roles and permissions, the audit trail and notifications. Each has its
+own navigation and its own Setup. Switch between them from the app name in the navigation bar, or the app
+launcher in the header; a person sees an application only if their roles open it.
 
 ```bash
 npm start        # http://127.0.0.1:4173
-npm test         # 92 PLM assertions + 258 CRM assertions
-npm run smoke    # 57 functional checks over real HTTP, against a running server
+npm test         # 92 PLM + 330 CRM + 301 Content Calendar assertions
+npm run smoke    # 85 functional checks over real HTTP, against a running server
 npm run validate # check the stage model against the tracker workbook
 npm run demo     # optional illustrative data — never part of the seed
 npm run reset    # delete the database; the next start re-seeds
@@ -34,15 +36,17 @@ item touches. There are **no products, no leads, no content and no people**, and
 
 The reference lists — twelve offerings, eight industries, nine customer segments, twelve channels, the
 eleven stage templates — are Assured's own taxonomy out of the source workbooks, not sample data. They
-stay, and are editable in Setup.
+stay, and are editable in Setup. The Content Calendar ships the three accounts (Assured, Siddique, Dhiraj)
+and four metrics (Impressions, Profile visits, Views, Likes) the sponsor named, the Content Manager role and
+its calendar rules — but no stage list and no target: those are the first thing configured.
 
 `npm run demo` adds the illustrative portfolio and CRM leads if you want something to walk through;
 `npm run reset` puts you back to clean.
 
 ## The Product Head configures everyone else
 
-The **Product Head** role carries `users.manage`, `stagemodel.manage`, `settings.manage` and
-`crm.setup.manage`. From that login, Setup → Users creates people and assigns any combination of roles;
+The **Product Head** role carries `users.manage`, `stagemodel.manage`, `settings.manage`,
+`crm.setup.manage` and `content.setup.manage`. From that login, Setup → Users creates people and assigns any combination of roles;
 Setup → Roles & permissions edits what each role may do and adds new ones. That is the only way users
 come into existence on a clean install, which the test suite relies on — it bootstraps every role user
 through this login before it can test anything else.
@@ -63,19 +67,51 @@ Two rules still hold on top of that. **BR-07** — only a user holding the appro
 **BR-09** — whoever marked the final exit criterion may not also record the approval, even where one
 person holds both roles.
 
-## The two modules meet at Seeding
+## Product Lifecycle and the Content Calendar meet at Seeding
 
 > *"When a product reaches Seeding, it needs to come to the content calendar as a notification."*
 
 When a PLM product enters market state **Seeding** — which happens on its first paid deployment once
-gate 8 is approved (BR-11) — the system raises a **launch-content prompt** on the CRM's content
-calendar and notifies everyone holding `crm.content.manage`.
+gate 8 is approved (BR-11) — the system raises a **launch-content prompt** on the Content Calendar and
+notifies everyone holding `crm.content.manage`.
 
 The prompt is deliberately *not* a content item. It appears as a banner on the calendar and a flag on
 its due date, carrying the product code, the problem it solves and a suggested date
-(`crm_seeding_lead_days`, default 10). **Plan it** opens the content form pre-filled and links the two;
-**Dismiss** needs a reason. Content still requires date, title, type, channel and person before it
-exists (BR-31) — the hand-off never fabricates a content item nobody owns.
+(`crm_seeding_lead_days`, default 10). **Plan it** opens the plan-a-post form pre-filled and links the two;
+**Dismiss** needs a reason. A post still needs a date, a content type with a stage list, an account and a
+platform before it exists (CC-20) — the hand-off never fabricates a post nobody owns. Deleting the post
+that answered a prompt opens the prompt again.
+
+## The Content Calendar — targets write the calendar
+
+A **posting target** says: account A posts content type T on platforms P, N times a month, in weeks W (the 1st
+to 4th occurrence — never a 5th, so every month gets the same count) on weekday D, from month X to month Y.
+Saving it creates one **slot** per date: a post with a date and no topic yet. Each slot copies its content
+type's **stage list**: the topic stage first, work stages, publishing last. Every stage carries the
+**readiness %** a post reaches when it is done, a **TAT** in days before posting, an **owner role**, and —
+for a reel's raw footage — the stage of another type it waits on, which ticks it automatically.
+
+A stage's deadline is **never stored**. It is the posting date less the TAT, moved *earlier* off weekends and
+holidays, so moving a post moves every deadline with it. Open stages are the owner role's **tasks**; a
+published post owes **figure captures** on the configured days after publishing, per platform. The
+**scorecard** sets target against planned, published and on time — a cancelled slot is a miss, not a
+smaller target.
+
+**Everything that shapes this is configuration**, in the Content Calendar's own Setup: content types and
+their stage lists; accounts; platforms; metrics and which platforms report each; holidays; and the rules —
+time zone, weekend days, the topic look-ahead, the due-soon window, the capture days, whether a post link is
+required per platform, the minimum reason length, the longest target, the role that runs the calendar and
+the daily digest. Saving a stage list applies it to every post not yet in production.
+
+Every refusal names its rule, **CC-01 to CC-40**, and says what to do next. `app/content.mjs` holds the
+catalogue (`RULES`); `app/content-test.mjs` proves each rule by what it refuses.
+
+**The first release's calendar is replaced, not run alongside.** On first start the migration rebuilds the
+`content` table in place (ids kept, so every lead's attribution survives), gives each earlier post a platform
+row and an account, and carries its engagement figure into the metric history. The first release's
+publishing targets stay as read-only history (CRM report CRM-09). Its content rules moved with it: BR-31 →
+CC-20, BR-32 → CC-25, BR-38's engagement half → CC-30/31, BR-39 → CC-10 … CC-15. BR-33 and BR-34 stay in
+the CRM, because they are about leads.
 
 ## Stage responsibilities are validated against the sheet
 
@@ -102,13 +138,21 @@ deployment (BR-11); Finance Head confirmation before revenue reaches reporting (
 fifty-character closure reason (BR-25); ageing a date revision does not reset (BR-30); immutable
 history (BR-33). **BR-08, consultation before approval, is deliberately not implemented** — see below.
 
-**CRM — all 38 business rules**, including company name as the only field mandatory at creation
+**CRM — every lead rule of the BRD**, including company name as the only field mandatory at creation
 (BR-01); pipeline derived from Offering × Industry and never set directly (BR-04); one active pipeline
 per pair (BR-05); cumulative requirements (BR-15); a refusal naming *every* missing field, not the
 first (BR-16); the conditional Online requirement (BR-17); Lead Source omitted from the refusal while
 the Channel that derives it is itself unmet (BR-19); loss as a status that keeps its stage (BR-28);
-one primary attribution plus unlimited touches (BR-33); reference values deactivated, never deleted
-(BR-35).
+one primary attribution plus unlimited touches, and only to a post that has a topic and was not
+cancelled (BR-33); reference values deactivated, never deleted (BR-35).
+
+**Content Calendar — CC-01 to CC-40**, including stage lists that start with the topic and end with
+publishing, with readiness rising and TATs never growing (CC-01 … CC-03); targets as weeks × weekdays with
+no two claiming the same slot (CC-12, CC-13); revising a target replacing only untouched slots (CC-15);
+stages done in order, by their owner role (CC-22, CC-23); a reel's footage waiting on its video, which must
+be due in time (CC-24); publishing only with every stage done, a link per platform and no future date
+(CC-25); a reason to move, cancel or reopen once work has started (CC-26 … CC-28); figures per platform,
+dated, as whole numbers (CC-30, CC-31).
 
 The browser never decides any of this. It shows the refusal and quotes the rule.
 
@@ -144,6 +188,16 @@ an accident.
    owner must re-mark in their own name. That is OI-09 made concrete rather than decided for you.
 8. **Notifications (CRM §13).** Out of scope in the CRM spec, but you asked for the Seeding hand-off.
    It is built as in-app notification plus a calendar prompt. No email — that still needs a mail host.
+9. **The Content Calendar is its own application over the same database.** It has its own navigation,
+   Setup and permissions, and the CRM no longer shows a calendar. It shares the user directory, the audit
+   trail and the `content` table that a lead's attribution points at. The permission `crm.content.manage`
+   keeps its first-release key so every existing grant keeps working; it now opens the Content Calendar,
+   not the CRM, and a role that holds only it sees no leads.
+10. **Weekends and reasons are the calendar's own.** The Content Calendar starts from the application's
+   weekend and minimum-reason settings but keeps its own copies (`content_weekend_days`,
+   `content_reason_min`), so tuning deadlines never changes PLM working-day counts or CRM movement rules.
+11. **"Today" is Dubai's.** Deadlines turn overdue at midnight in the configured time zone
+   (`content_timezone`, default Asia/Dubai), not at midnight UTC four hours later.
 
 ## Spec observations worth a sponsor decision
 
@@ -179,14 +233,14 @@ for the topology, what is done, what is tested, and the two things still needed 
 
 | File | Contains |
 |---|---|
-| `app/db.mjs` | Schema — 40 tables across both modules |
-| `app/seed.mjs` · `app/api.mjs` | PLM reference data · PLM rules, gate engine, dashboard, RPT-01…09 |
-| `app/crm-seed.mjs` · `app/crm.mjs` | CRM §9 reference data · CRM rules, stage engine, calendar, CRM-01…08 |
-| `app/crm-demo.mjs` | Illustrative leads and content (`npm run demo`) |
+| `app/db.mjs` | Schema — 51 tables across the three modules |
+| `app/seed.mjs` · `app/api.mjs` | PLM reference data and every permission · PLM rules, gate engine, dashboard, RPT-01…09 |
+| `app/crm-seed.mjs` · `app/crm.mjs` | CRM §9 reference data · CRM rules, stage engine, attribution, CRM-01…09 |
+| `app/content.mjs` | Content Calendar: the migration, configuration, targets, the item lifecycle, tasks, scorecard, CC-01…40 |
 | `app/server.mjs` · `app/lib.mjs` | HTTP, session, routing · working days, scrypt, signed sessions, CSV |
-| `app/test.mjs` · `app/crm-test.mjs` | The two unit suites |
+| `app/test.mjs` · `app/crm-test.mjs` · `app/content-test.mjs` | The three unit suites |
 | `app/smoke.mjs` | Functional checks over real HTTP — re-runnable against any deployment |
 | `app/xlsx.mjs` · `app/validate-stages.mjs` | Dependency-free xlsx reader · the stage-responsibility validator |
-| `app/plm-demo.mjs` · `app/crm-demo.mjs` | Optional illustrative data (`npm run demo`) |
+| `app/plm-demo.mjs` · `app/crm-demo.mjs` · `app/content-demo.mjs` | Optional illustrative data (`npm run demo`) |
 | `deploy/` | Catalyst schema, provisioner and function · Vercel build, config and edge emulator |
-| `app/public/` | `app.js` shell · `views.js`, `setup.js` (PLM) · `crm.js`, `calendar.js`, `crm-setup.js` (CRM) · `app.css` |
+| `app/public/` | `app.js` shell · `views.js`, `setup.js` (PLM) · `crm.js`, `crm-setup.js` (CRM) · `content.js`, `content-setup.js` (Content Calendar) · `app.css` |

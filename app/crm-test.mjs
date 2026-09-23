@@ -16,10 +16,12 @@ const { seedCRMIfEmpty, migrateCRM, GATE_REQUIREMENTS, GATE_CONDITIONAL, EARLY_R
   CLOSURE_REQUIREMENTS, CSE_REQUIREMENTS, seedDefaultRequirements } = await import("./crm-seed.mjs");
 const A = await import("./api.mjs");
 const C = await import("./crm.mjs");
+const E = await import("./content.mjs");
 const { today } = await import("./lib.mjs");
 
 seedIfEmpty();
 seedCRMIfEmpty();
+E.migrateContentV2();                                  // as the server does at start-up
 
 let pass = 0, failures = 0;
 const ok = (cond, msg) => { if (cond) pass++; else { failures++; console.error("  FAIL " + msg); } };
@@ -350,25 +352,19 @@ const dashAfterLoss = C.crmDashboard(VIKRAM);
 ok(!dashAfterLoss.bands.some(x => x.n && dashAfterLoss.kpi.open === 0), "BR-30 lost leads are excluded from the funnel band counts");
 ok(!dashAfterLoss.blocked.some(l => l.id === b.id), "BR-30 lost leads are excluded from the blocked count");
 
-/* ================= Iteration 6 — content and attribution (≥10) ================= */
+/* ================= Iteration 6 — content attribution (≥10) ================= */
+// Content is planned, worked and published in the Content Calendar, proved in content-test.mjs. What the
+// CRM owns is attribution: which post a lead came from (BR-33), and that such a post is never deleted (BR-34).
 const ct = db.col("SELECT id FROM content_type WHERE name='Long-form'");
 const cc = db.col("SELECT id FROM content_channel WHERE name='LinkedIn'");
-refused(() => C.saveContent(SHIREEN, null, { title: "No date", type_id: ct, channel_id: cc, person_id: SHIREEN.id }),
-  "BR-31", "content with no date", ["Date"]);
-refused(() => C.saveContent(SHIREEN, null, { date: today(), type_id: ct, channel_id: cc, person_id: SHIREEN.id }),
-  "BR-31", "content with no title", ["Title"]);
-refused(() => C.saveContent(SHIREEN, null, { date: today(), title: "X", channel_id: cc, person_id: SHIREEN.id }),
-  "BR-31", "content with no type", ["Content type"]);
-refused(() => C.saveContent(SHIREEN, null, { date: today(), title: "X", type_id: ct, person_id: SHIREEN.id }),
-  "BR-31", "content with no channel", ["Channel"]);
-refused(() => C.saveContent(SHIREEN, null, { date: today(), title: "X", type_id: ct, channel_id: cc }),
-  "BR-31", "content with no person", ["Person"]);
-const future = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
-refused(() => C.saveContent(SHIREEN, null, { date: future, title: "Future post", type_id: ct, channel_id: cc,
-  person_id: SHIREEN.id, status: "Published" }), "BR-32", "publishing an item dated in the future", ["future"]);
-
-const c1 = C.saveContent(SHIREEN, null, { date: "2026-08-03", title: "Warehouse throughput teardown", type_id: ct, channel_id: cc, person_id: SHIREEN.id });
-const c2 = C.saveContent(SHIREEN, null, { date: "2026-08-17", title: "Three signs your racking is wrong", type_id: ct, channel_id: cc, person_id: SHIREEN.id });
+const ASSURED = db.col("SELECT id FROM content_account WHERE name='Assured'");
+const ahead = n => E.addDays(E.today(), n);
+E.saveStages(ADMIN, ct, [{ name: "Topic mapped", pct: 10, tat_days: 7, kind: "topic" },
+  { name: "Published", pct: 100, tat_days: 0, kind: "publish" }]);
+const plan = (n, title) => E.createItem(ADMIN, { date: ahead(n), type_id: ct, account_id: ASSURED, platforms: [cc],
+  title, theme: "Warehousing", keyword: "racking" });
+const c1 = plan(10, "Warehouse throughput teardown");
+const c2 = plan(17, "Three signs your racking is wrong");
 C.attachContent(SIDDIQUE, b.id, { content_id: c1.id, primary: true });
 eq(C.getLead(b.id).primary_content_id, c1.id, "BR-33 a primary attribution is recorded");
 eq(db.col("SELECT COUNT(*) FROM lead_content_touch WHERE lead_id=? AND content_id=?", b.id, c1.id), 1,
@@ -377,19 +373,24 @@ C.attachContent(SIDDIQUE, b.id, { content_id: c2.id, primary: true });
 eq(C.getLead(b.id).primary_content_id, c2.id, "BR-33 a second primary replaces the first");
 eq(db.col("SELECT COUNT(*) FROM lead_content_touch WHERE lead_id=?", b.id), 2, "BR-33 both remain touches");
 eq(db.col("SELECT COUNT(*) FROM lead_content_touch WHERE lead_id=? AND is_primary=1", b.id), 1, "BR-33 exactly one touch is primary");
-refused(() => C.deleteContent(SHIREEN, c1.id), "BR-34", "deleting content attributed to a lead", ["1 lead"]);
-const c3 = C.saveContent(SHIREEN, null, { date: "2026-08-20", title: "Unattached", type_id: ct, channel_id: cc, person_id: SHIREEN.id });
-C.deleteContent(SHIREEN, c3.id);
+refused(() => E.deleteItem(SHIREEN, c1.id), "BR-34", "deleting content attributed to a lead", ["1 lead"]);
+const c3 = plan(20, "Unattached");
+E.deleteItem(SHIREEN, c3.id);
 eq(db.col("SELECT COUNT(*) FROM content WHERE id=?", c3.id), 0, "BR-34 unattributed content can be deleted");
-const aug = C.contentForMonth(2026, 8);
-eq(aug.length, 2, "FR-19 the month grid and the planning table return the same item set");
-eq(C.contentForMonth(2027, 3).length, 0, "FR-18 a month with no content renders without error");
+const slotOnly = E.createItem(ADMIN, { date: ahead(24), type_id: ct, account_id: ASSURED, platforms: [cc] });
+refused(() => C.attachContent(SIDDIQUE, b.id, { content_id: slotOnly.id }), "BR-33",
+  "attaching an open slot, which has no topic a lead could have come from", ["no topic"]);
+const dropped = plan(26, "A post that was dropped");
+E.cancelItem(ADMIN, dropped.id, { reason: "Speaker withdrew from the recording" });
+refused(() => C.attachContent(SIDDIQUE, b.id, { content_id: dropped.id }), "BR-33", "attaching a cancelled post", ["cancelled"]);
 
 // Activity Name is the content picker, and it carries the primary attribution with it.
 refused(() => C.updateLead(SIDDIQUE, b.id, { activity: "free text" }), "BR-33",
   "Activity Name typed as free text rather than chosen from the calendar", ["Content Calendar"]);
 refused(() => C.updateLead(SIDDIQUE, b.id, { activity: 99999 }), "BR-33",
   "Activity Name pointing at a content item that does not exist");
+refused(() => C.updateLead(SIDDIQUE, b.id, { activity: slotOnly.id }), "BR-33",
+  "Activity Name pointing at an open slot with no topic", ["no topic"]);
 C.updateLead(SIDDIQUE, b.id, { activity: c1.id });
 const withAct = C.getLead(b.id);
 eq(withAct.activity, c1.title, "choosing an Activity Name snapshots the content title onto the lead");
@@ -397,47 +398,15 @@ eq(withAct.primary_content_id, c1.id, "BR-33 the Activity Name is the primary at
 eq(withAct.activity_channel_name, "LinkedIn", "the lead carries the social channel of the content it came from");
 eq(db.col("SELECT is_primary FROM lead_content_touch WHERE lead_id=? AND content_id=?", b.id, c1.id), 1,
   "BR-33 the chosen item is also a touch, and the primary one");
-C.saveContent(SHIREEN, c1.id, { ...c1, title: "Warehouse throughput teardown (revised)" });
+E.mapTopic(ADMIN, c1.id, { title: "Warehouse throughput teardown (revised)" });
 eq(C.getLead(b.id).activity, "Warehouse throughput teardown (revised)",
-  "renaming the content keeps every lead's Activity Name in step");
+  "renaming the topic in the Content Calendar keeps every lead's Activity Name in step");
 C.updateLead(SIDDIQUE, b.id, { activity: "" });
 eq(C.getLead(b.id).primary_content_id, null, "clearing the Activity Name clears the primary attribution");
 C.updateLead(SIDDIQUE, b.id, { activity: c2.id });
-
-// BR-38 — engagement is a number and the unit it is counted in; neither half stands alone.
-refused(() => C.saveContent(SHIREEN, null, { date: "2026-08-21", title: "E1", type_id: ct, channel_id: cc,
-  person_id: SHIREEN.id, engagement_value: 900 }), "BR-38", "an engagement number with no unit", ["unit"]);
-refused(() => C.saveContent(SHIREEN, null, { date: "2026-08-21", title: "E2", type_id: ct, channel_id: cc,
-  person_id: SHIREEN.id, engagement_metric: "Views" }), "BR-38", "an engagement unit with no number");
-refused(() => C.saveContent(SHIREEN, null, { date: "2026-08-21", title: "E3", type_id: ct, channel_id: cc,
-  person_id: SHIREEN.id, engagement_metric: "Claps", engagement_value: 5 }), "BR-38", "an engagement unit that is not one of the three");
-refused(() => C.saveContent(SHIREEN, null, { date: "2026-08-21", title: "E4", type_id: ct, channel_id: cc,
-  person_id: SHIREEN.id, engagement_metric: "Views", engagement_value: -1 }), "BR-38", "a negative engagement number");
-const eng = C.saveContent(SHIREEN, null, { date: "2026-08-22", title: "Racking teardown", type_id: ct,
-  channel_id: cc, person_id: SHIREEN.id, status: "Published", engagement_metric: "Impressions", engagement_value: "12,400" });
-eq(eng.engagement_value, 12400, "BR-38 engagement is stored as a whole number");
-eq(eng.engagement_metric, "Impressions", "BR-38 engagement carries the unit it is counted in");
-
-// BR-39 — publishing targets, measured against the calendar and never typed in.
-refused(() => C.saveTarget(SHIREEN, null, { period: "August", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 4 }),
-  "BR-39", "a target for a month that is not written YYYY-MM");
-refused(() => C.saveTarget(SHIREEN, null, { period: "2026-08", type_id: ct, person_id: SHIREEN.id, target: 4 }),
-  "BR-39", "a target with no channel", ["Channel"]);
-refused(() => C.saveTarget(SHIREEN, null, { period: "2026-08", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 0 }),
-  "BR-39", "a target of zero");
-refused(() => C.saveTarget(SHIREEN, null, { period: "2026-08", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 2.5 }),
-  "BR-39", "a fractional target");
-const tg = C.saveTarget(SHIREEN, null, { period: "2026-08", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 4 });
-eq(tg.length, 1, "BR-39 a target is set for one month, channel, content type and person");
-eq(tg[0].published, 1, "BR-39 achievement is counted from the published content, not stored");
-eq(tg[0].target, 4, "BR-39 the target is what was set");
-eq(tg[0].gap, 3, "BR-39 the gap is the target less what was published");
-refused(() => C.saveTarget(SHIREEN, null, { period: "2026-08", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 9 }),
-  "BR-39", "a second target for the same person, channel, type and month", ["already set"]);
-refused(() => C.saveTarget(CONTRIB, null, { period: "2026-09", channel_id: cc, type_id: ct, person_id: SHIREEN.id, target: 2 }),
-  "FR-43", "a user without crm.content.manage setting a target", ["Plan and publish content"]);
-C.deleteTarget(SHIREEN, tg[0].id);
-eq(C.listTargets("2026-08").length, 0, "BR-39 a target can be removed without touching the content behind it");
+eq(C.leadDetail(SIDDIQUE, b.id).touches.find(t => t.content_id === c2.id).channel_name, "LinkedIn",
+  "the lead record lists each touch with the platforms it went out on");
+eq(C.listTargets(null).length, 0, "the first release's publishing targets are history only — nothing sets one any more");
 
 /* ================= Iteration 7 — configuration (≥16) ================= */
 const pipe = db.one("SELECT * FROM pipeline WHERE offering_id=?", offId("XLC"));
@@ -599,15 +568,20 @@ ok(db.col("SELECT COUNT(*) FROM notifications WHERE kind='content' AND user_id=?
 A.recordDeployment(BH, prod.id, { client_ref: "Second client", deployed_on: today(), revenue: 20000 });
 eq(C.listPrompts("Open").length, 1, "a second deployment does not raise a duplicate prompt");
 
-// Turning the prompt into a content item resolves it (BR-31 still applies).
-refused(() => C.saveContent(SHIREEN, null, { date: today(), title: "Launch", channel_id: cc, person_id: SHIREEN.id, prompt_id: openPrompts[0].id }),
-  "BR-31", "planning from a prompt still requires a content type");
-const launch = C.saveContent(SHIREEN, null, { date: today(), title: "Handoff Test Product is live",
-  type_id: ct, channel_id: cc, person_id: SHIREEN.id, prompt_id: openPrompts[0].id });
+// Planning the launch post in the Content Calendar resolves the prompt; a prompt is never a content item itself.
+refused(() => E.createItem(SHIREEN, { date: ahead(12), title: "Launch", account_id: ASSURED, platforms: [cc],
+  prompt_id: openPrompts[0].id }), "CC-20", "planning from a prompt still requires a content type", ["Content type"]);
+eq(C.listPrompts("Open").length, 1, "…and a refused plan leaves the prompt open");
+const launch = E.createItem(SHIREEN, { date: ahead(12), type_id: ct, account_id: ASSURED, platforms: [cc],
+  title: "Handoff Test Product is live", theme: "Product launch", keyword: "handoff", prompt_id: openPrompts[0].id });
 eq(C.listPrompts("Open").length, 0, "planning the content closes the prompt");
 eq(db.col("SELECT content_id FROM content_prompt WHERE id=?", openPrompts[0].id), launch.id, "the prompt links to the content item it became");
 refused(() => C.dismissPrompt(SHIREEN, openPrompts[0].id, { reason: "Already planned, so this must refuse." }),
   "FR-18", "dismissing a prompt that has already been dealt with");
+eq(E.deleteItem(SHIREEN, launch.id).prompt_reopened, true, "deleting the planned post opens its launch prompt again");
+eq(C.listPrompts("Open").length, 1, "…so the launch still has to be planned or dismissed");
+const planner = mk("Content Planner One", "planner@assured.local", "Content Planner");
+ok(!C.hasCRM(planner), "FR-43 a role that only plans content opens the Content Calendar, not the CRM");
 
 /* ================= end-to-end (§11 rule 4) ================= */
 // copyMatrix above deliberately replaced every pipeline's matched stages, which is what FR-37 does.

@@ -127,6 +127,7 @@ main{padding:.75rem;max-width:110rem;margin:0 auto}
 .btn.brand:disabled{background:#C9C9C9;border-color:#C9C9C9;color:#fff}
 .btn.danger{background:#fff;border-color:var(--line-2);color:var(--error)}
 .btn.danger:hover{background:var(--error);border-color:var(--error);color:#fff}
+.btn.danger:disabled,.btn.danger:disabled:hover{color:var(--ink-4);background:var(--surface-3);border-color:var(--line)}
 .btn.success{background:var(--success);border-color:var(--success);color:#fff}
 .btn.success:hover{background:var(--success-ink);border-color:var(--success-ink)}
 .btn.sm{height:1.625rem;padding:0 .5rem;font-size:.75rem}
@@ -460,21 +461,13 @@ select.inp.pickbox option{padding:.25rem .375rem;border-radius:3px}
 select.inp.pickbox option:checked{background:var(--brand);color:#fff}
 @media (max-width:640px){.pickhead{grid-template-columns:1fr}}
 
-/* ---- targets: a bar per target row, published against the number set ---- */
-.tgrid{display:grid;gap:.5rem}
-.trow{display:grid;grid-template-columns:1fr 10rem auto;gap:.75rem;align-items:center;
-  padding:.5rem .75rem;border:1px solid var(--line-1);border-radius:var(--r);background:var(--surface-1)}
-.trow .who{min-width:0}
-.trow .who b{display:block;font-size:.8125rem}
-.trow .who .m{font-size:.6875rem;color:var(--ink-4)}
-.tbar{height:.5rem;border-radius:999px;background:var(--surface-3);overflow:hidden}
+/* ---- achievement: a bar of what was published against the target ---- */
+.tbar{height:.5rem;border-radius:999px;background:var(--surface-3);overflow:hidden;min-width:5rem}
 .tbar i{display:block;height:100%;border-radius:999px;background:var(--brand)}
 .tbar.met i{background:var(--success)}
-.tnum{font-size:.75rem;white-space:nowrap;font-variant-numeric:tabular-nums}
-@media (max-width:720px){.trow{grid-template-columns:1fr}}
 
-/* ---- access editor: PLM and CRM side by side, grouped ---- */
-.accgrid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+/* ---- access editor: one column per application, grouped ---- */
+.accgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:.75rem}
 .accgrid .mod{border:1px solid var(--line-2);border-radius:var(--r);overflow:hidden}
 .accgrid .mod>h4{margin:0;padding:.375rem .625rem;font-size:.75rem;background:var(--surface-3);
   border-bottom:1px solid var(--line-1);color:var(--ink-2)}
@@ -482,3 +475,82 @@ select.inp.pickbox option:checked{background:var(--brand);color:#fff}
   padding:.375rem .625rem .125rem}
 .accgrid .mod .checkline{padding:.0625rem .625rem}
 @media (max-width:720px){.accgrid{grid-template-columns:1fr}}
+
+/* ============================ Content Calendar ============================ */
+.tabs .cnt.r{background:var(--error-bg);color:var(--error-ink)}
+.chips{display:flex;gap:.375rem;flex-wrap:wrap;align-items:center}
+.inline{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.inp.sm{min-height:1.75rem;font-size:.75rem;padding:.125rem .4375rem}
+.ruletag{font-family:var(--mono);font-size:.625rem;font-weight:700;color:var(--brand-dark);background:var(--brand-light);
+  border-radius:3px;padding:0 .3125rem;white-space:nowrap;cursor:help}
+.acct{display:inline-flex;align-items:center;gap:.3125rem;font-weight:600;white-space:nowrap}
+.acct i{width:.5625rem;height:.5625rem;border-radius:50%;display:inline-block}
+.plat{display:inline-flex;align-items:center;gap:.25rem;font-size:.75rem;color:var(--ink-2);white-space:nowrap}
+.plat i{width:.5rem;height:.5rem;border-radius:2px;display:inline-block}
+.badge.open{background:#fff;border:1px dashed var(--line-2);color:var(--ink-3)}
+.badge.x{background:var(--surface-3);color:var(--ink-4);text-decoration:line-through}
+
+/* the month grid: weekends and holidays shaded, a dashed slot waits for its topic */
+.cal .day.off{background:#F6F6F3}
+.cal .day .n .hol{font-size:.5625rem;color:var(--warn);font-weight:700;display:inline-block;max-width:6.5rem;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+.cev.open{background:#fff;border-top:1px dashed var(--line-2);border-right:1px dashed var(--line-2);border-bottom:1px dashed var(--line-2)}
+.cev.open b{color:var(--ink-3);font-weight:600;font-style:italic}
+.cev.cancel b{text-decoration:line-through;color:var(--ink-4)}
+.cev .late{width:.4375rem;height:.4375rem;border-radius:50%;background:var(--error);display:inline-block;margin-right:.25rem;vertical-align:middle}
+button.cev{width:100%;text-align:left}
+.meter{display:block;height:.25rem;background:var(--line);border-radius:.125rem;overflow:hidden;margin-top:.1875rem}
+.meter i{display:block;height:100%;background:var(--brand)}
+.meter.g i{background:var(--success)} .meter.t i{background:var(--teal)}
+.legend{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:.625rem;font-size:.6875rem;color:var(--ink-3)}
+.agenda{display:none}
+.agenda .arow{display:grid;grid-template-columns:3.75rem 1fr;gap:.5rem;padding:.4375rem 0;border-bottom:1px solid var(--line)}
+.agenda .arow .d{font-weight:700;font-size:.75rem}
+.agenda .arow .d span{display:block;font-weight:400;color:var(--ink-4);font-size:.6875rem}
+.agenda .arow .evs{display:flex;flex-direction:column;gap:.25rem;min-width:0}
+@media (max-width:44rem){.cal{display:none}.agenda{display:block}}
+
+/* task list — grouped overdue → due soon → upcoming → waiting → blocked */
+.tgroup>h3{font-size:.6875rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);padding:.5rem .75rem;
+  background:var(--surface-2);border-bottom:1px solid var(--line);display:flex;gap:.5rem;align-items:center}
+.task{display:grid;grid-template-columns:1.25rem minmax(0,1.2fr) minmax(0,1.6fr) 7rem auto;gap:.625rem;align-items:center;
+  padding:.5rem .75rem;border-bottom:1px solid var(--line)}
+.task:hover{background:#F8FBFE}
+.task .st b{font-size:.8125rem}
+.task .due{font-size:.75rem}
+.task .due small{display:block;color:var(--ink-4);font-size:.625rem}
+.task .act{text-align:right}
+@media (max-width:44rem){.task{grid-template-columns:1.25rem 1fr}.task .it,.task .due,.task .act{grid-column:2;text-align:left}}
+.tdot{width:.75rem;height:.75rem;border-radius:50%;border:2px solid var(--line-2);display:inline-block;background:#fff;flex:0 0 auto}
+.tdot.done{background:var(--brand);border-color:var(--brand)}
+.tdot.overdue{background:var(--error);border-color:var(--error)}
+.tdot.due-soon{background:var(--warn-line);border-color:var(--warn-line)}
+.tdot.upcoming{border-color:var(--brand)}
+.tdot.waiting{border-color:var(--violet);border-style:dashed}
+.tdot.blocked{border-color:var(--line-2);background:var(--surface-3)}
+
+/* the item record's stage list */
+.stages{display:flex;flex-direction:column}
+.srow{display:grid;grid-template-columns:1.25rem minmax(0,1fr) auto;gap:.625rem;padding:.5rem .75rem;
+  border-bottom:1px solid var(--line);align-items:start}
+.srow:last-child{border-bottom:none}
+.srow .tdot{margin-top:.1875rem}
+.srow .nm{font-weight:700;font-size:.8125rem;display:flex;gap:.375rem;align-items:center;flex-wrap:wrap}
+.srow .meta{font-size:.6875rem;color:var(--ink-3);margin-top:.0625rem}
+.srow .dn{font-size:.6875rem;color:var(--success-ink);margin-top:.125rem}
+.srow .acts{display:flex;gap:.25rem;flex-wrap:wrap;justify-content:flex-end}
+.bigmeter{height:.375rem;background:var(--line);border-radius:.1875rem;overflow:hidden;margin-top:.25rem}
+.bigmeter i{display:block;height:100%}
+
+/* a target's preview: every date it would write */
+.pmonth{display:flex;gap:.5rem;align-items:baseline;margin-bottom:.3125rem;flex-wrap:wrap}
+.pmonth .lbl{width:7.5rem;flex:0 0 auto}
+.datepills{display:flex;flex-wrap:wrap;gap:.25rem}
+.dp{font-size:.6875rem;font-variant-numeric:tabular-nums;padding:.0625rem .375rem;border-radius:3px;background:var(--brand-light);color:var(--brand-dark)}
+.dp.late{background:var(--error-bg);color:var(--error-ink)}
+.dp.past{background:var(--surface-3);color:var(--ink-4);text-decoration:line-through}
+
+/* stage editor */
+table.dt.stg td{padding:.3125rem .375rem}
+table.dt.stg .inp{min-height:1.75rem;font-size:.75rem;padding:.125rem .375rem}
+table.dt.stg .n4{width:4.5rem;text-align:right}

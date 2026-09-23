@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-11T08:18:59.803Z",
+  "generated": "2026-09-22T13:10:47.148Z",
   "tables": [
     {
       "table_name": "users",
@@ -331,6 +331,213 @@
       ]
     },
     {
+      "table_name": "content_account",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "kind",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "Company"
+        },
+        {
+          "column_name": "person_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "colour",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "content_cadence",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "account_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_account",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "type_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_type",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "per_month",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "weeks",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "weekdays",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "start_period",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "end_period",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "note",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "replaced_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_cadence",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "created_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        }
+      ]
+    },
+    {
       "table_name": "offering",
       "composite_key": null,
       "columns": [
@@ -459,7 +666,7 @@
           "column_name": "title",
           "data_type": "varchar",
           "max_length": 255,
-          "is_mandatory": "true",
+          "is_mandatory": "false",
           "is_unique": "false",
           "search_index_enabled": "false",
           "audit_consent": "false"
@@ -479,7 +686,7 @@
         {
           "column_name": "channel_id",
           "data_type": "int",
-          "is_mandatory": "true",
+          "is_mandatory": "false",
           "is_unique": "false",
           "search_index_enabled": "false",
           "audit_consent": "false",
@@ -491,12 +698,57 @@
         {
           "column_name": "person_id",
           "data_type": "int",
-          "is_mandatory": "true",
+          "is_mandatory": "false",
           "is_unique": "false",
           "search_index_enabled": "false",
           "audit_consent": "false",
           "references": {
             "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "account_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_account",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "cadence_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_cadence",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "slot_date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "parent_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content",
             "column": "id"
           }
         },
@@ -528,6 +780,15 @@
           "column_name": "theme",
           "data_type": "text",
           "is_mandatory": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "keyword",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
           "audit_consent": "false"
         },
         {
@@ -567,6 +828,51 @@
           "audit_consent": "false"
         },
         {
+          "column_name": "published_on",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "cancelled_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "cancel_reason",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "orphaned",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "created_on",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
           "column_name": "created_at",
           "data_type": "varchar",
           "max_length": 32,
@@ -586,6 +892,296 @@
             "table": "users",
             "column": "id"
           }
+        }
+      ]
+    },
+    {
+      "table_name": "content_cadence_platform",
+      "composite_key": [
+        "cadence_id",
+        "channel_id"
+      ],
+      "columns": [
+        {
+          "column_name": "cadence_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_cadence",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "channel_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_channel",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        }
+      ]
+    },
+    {
+      "table_name": "content_holiday",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "content_holiday_date",
+          "source_column": "date",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        }
+      ]
+    },
+    {
+      "table_name": "content_metric",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "help",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "active",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "1"
+        },
+        {
+          "column_name": "sort",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        }
+      ]
+    },
+    {
+      "table_name": "content_metric_platform",
+      "composite_key": [
+        "metric_id",
+        "channel_id"
+      ],
+      "columns": [
+        {
+          "column_name": "metric_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_metric",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "channel_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_channel",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        }
+      ]
+    },
+    {
+      "table_name": "content_metric_value",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "content_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "channel_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_channel",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "metric_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_metric",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "captured_on",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "value",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "source",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "manual"
+        },
+        {
+          "column_name": "recorded_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "recorded_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        }
+      ]
+    },
+    {
+      "table_name": "content_platform",
+      "composite_key": [
+        "content_id",
+        "channel_id"
+      ],
+      "columns": [
+        {
+          "column_name": "content_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "channel_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_channel",
+            "column": "id"
+          },
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "url",
+          "data_type": "varchar",
+          "max_length": 320,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
         }
       ]
     },
@@ -1172,6 +1768,100 @@
       ]
     },
     {
+      "table_name": "content_stage",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "type_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_type",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "seq",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "pct",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "tat_days",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "owner_role_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "roles",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "kind",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "work"
+        },
+        {
+          "column_name": "parent_stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_stage",
+            "column": "id"
+          }
+        }
+      ]
+    },
+    {
       "table_name": "content_target",
       "composite_key": null,
       "columns": [
@@ -1266,6 +1956,159 @@
             "table": "users",
             "column": "id"
           }
+        }
+      ]
+    },
+    {
+      "table_name": "content_task",
+      "composite_key": null,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "true",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "description": "Application identifier (Catalyst ROWID remains the primary key)"
+        },
+        {
+          "column_name": "content_id",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_stage",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "seq",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "name",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "pct",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "tat_days",
+          "data_type": "int",
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "owner_role_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "roles",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "kind",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "true",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "parent_stage_id",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "content_stage",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "done_at",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "done_on",
+          "data_type": "varchar",
+          "max_length": 32,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
+        },
+        {
+          "column_name": "done_by",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "references": {
+            "table": "users",
+            "column": "id"
+          }
+        },
+        {
+          "column_name": "auto",
+          "data_type": "int",
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false",
+          "default_value": "0"
+        },
+        {
+          "column_name": "note",
+          "data_type": "varchar",
+          "max_length": 255,
+          "is_mandatory": "false",
+          "is_unique": "false",
+          "search_index_enabled": "false",
+          "audit_consent": "false"
         }
       ]
     },

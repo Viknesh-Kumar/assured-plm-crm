@@ -2,11 +2,12 @@
 import * as V from "./views.js";
 import * as SU from "./setup.js";
 import * as CRM from "./crm.js";
-import * as CAL from "./calendar.js";
 import * as CS from "./crm-setup.js";
+import * as CT from "./content.js";
+import * as CTS from "./content-setup.js";
 
 /* ------------------------------- state ------------------------------- */
-export const S = { boot: null, products: [], dash: null, params: [], crm: null, crmDash: null, app: "plm" };
+export const S = { boot: null, products: [], dash: null, params: [], crm: null, crmDash: null, content: null, app: "plm" };
 
 /* ------------------------------- api --------------------------------- */
 export async function api(path, { method = "GET", body } = {}) {
@@ -34,7 +35,13 @@ export async function crmRefresh() {
   const [crm, dash] = await Promise.all([api("/crm/bootstrap"), api("/crm/dashboard")]);
   S.crm = crm; S.crmDash = dash;
 }
-export const hasCRM = () => !!S.boot?.user?.permissions?.some(p => p.startsWith("crm."));
+/** The Content Calendar's configuration, permissions and tab counts — refreshed on every navigation in it. */
+export async function contentRefresh() { S.content = await api("/content/bootstrap"); return S.content; }
+
+/** Planning content opens the Content Calendar; it no longer opens the CRM. */
+const CONTENT_KEYS = ["crm.content.manage", "content.cadence.manage", "content.setup.manage"];
+export const hasCRM = () => !!S.boot?.user?.permissions?.some(p => p.startsWith("crm.") && p !== "crm.content.manage");
+export const hasContent = () => !!S.boot?.user?.permissions?.some(p => CONTENT_KEYS.includes(p));
 
 /* ---------------------------- formatting ----------------------------- */
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -275,8 +282,8 @@ export function dataTable({ columns, rows, onRow, empty, rowClass, sortKey, sort
   if (!rows.length) return `<div class="empty">${esc(empty || "Nothing to show.")}</div>`;
   return `<div class="tablewrap"><table class="dt">
     <thead><tr>${columns.map(c => `<th class="${c.align || ""} ${c.sort ? "sortable" : ""}" ${c.sort ? `data-sort="${c.sort}"` : ""}
-      ${sortKey === c.sort ? `aria-sort="${sortDir < 0 ? "descending" : "ascending"}"` : ""}>
-      ${esc(c.label)}${sortKey === c.sort ? ` <span class="arr">${sortDir < 0 ? "▲" : "▼"}</span>` : ""}</th>`).join("")}</tr></thead>
+      ${c.sort && sortKey === c.sort ? `aria-sort="${sortDir < 0 ? "descending" : "ascending"}"` : ""}>
+      ${esc(c.label)}${c.sort && sortKey === c.sort ? ` <span class="arr">${sortDir < 0 ? "▲" : "▼"}</span>` : ""}</th>`).join("")}</tr></thead>
     <tbody>${rows.map(r => `<tr class="${onRow ? "click" : ""} ${rowClass ? rowClass(r) : ""}" ${onRow ? `data-row="${onRow(r)}"` : ""}>
       ${columns.map(c => `<td class="${c.align || ""}">${c.cell(r)}</td>`).join("")}</tr>`).join("")}</tbody>
   </table></div>`;
@@ -339,15 +346,30 @@ const ROUTES = [
   [/^\/crm\/leads$/, () => CRM.leads()],
   [/^\/crm\/lead\/(\d+)$/, id => CRM.lead(Number(id))],
   [/^\/crm\/board$/, () => CRM.board()],
-  [/^\/crm\/calendar$/, () => CAL.calendar()],
-  [/^\/crm\/content\/(\d+)$/, id => CAL.contentRecord(Number(id))],
   [/^\/crm\/reports$/, () => CRM.reports()],
   [/^\/crm\/reports\/([A-Za-z0-9-]+)$/, key => CRM.reportView(key)],
   [/^\/crm\/setup$/, () => CS.setup("pipelines")],
-  [/^\/crm\/setup\/(\w+)$/, tab => CS.setup(tab)]
+  [/^\/crm\/setup\/(\w+)$/, tab => CS.setup(tab)],
+  [/^\/content\/?$/, () => CT.calendar()],
+  [/^\/content\/calendar$/, () => CT.calendar()],
+  [/^\/content\/topics$/, () => CT.topics()],
+  [/^\/content\/tasks$/, () => CT.tasks()],
+  [/^\/content\/targets$/, () => CT.targets()],
+  [/^\/content\/scorecard$/, () => CT.scorecard()],
+  [/^\/content\/item\/(\d+)$/, id => CT.item(Number(id))],
+  [/^\/content\/setup$/, () => CTS.setup("types")],
+  [/^\/content\/setup\/(\w+)$/, tab => CTS.setup(tab)]
 ];
 
+/** Where the calendar lived inside the CRM, for bookmarks made before it became its own application. */
+const MOVED = [[/^\/crm\/calendar$/, () => "/content/calendar"], [/^\/crm\/content\/(\d+)$/, id => `/content/item/${id}`]];
+
 export const go = hash => { location.hash = hash; };
+
+/** The page shown in place of an application the signed-in person's roles do not open. */
+const restricted = (what, how) => chrome("/home") + `<main><div class="card"><div class="empty">
+  ${what} is restricted. ${how}
+  <div style="margin-top:.75rem">${link("/home", "Go to Product Lifecycle", "btn brand")}</div></div></div></main>`;
 
 let mountFn = null;
 export async function render() {
@@ -355,18 +377,22 @@ export async function render() {
   const raw = location.hash.replace(/^#/, "") || "/home";
   // A view may carry a query ("#/products?mine"); it reads that itself. Routing is on the path alone.
   const path = raw.split("?")[0];
-  S.app = path.startsWith("/crm") ? "crm" : "plm";
+  for (const [rx, to] of MOVED) { const m = path.match(rx); if (m) return location.replace("#" + to(...m.slice(1))); }
+  S.app = path.startsWith("/crm") ? "crm" : path.startsWith("/content") ? "content" : "plm";
   const app = document.getElementById("app");
-  if (S.app === "crm" && !hasCRM()) {
-    S.app = "plm";                                    // show the PLM nav, not a CRM nav that loops back here
+  if ((S.app === "crm" && !hasCRM()) || (S.app === "content" && !hasContent())) {
+    const which = S.app;
+    S.app = "plm";                                    // show the PLM nav, not a nav that loops back here
     app.className = "";
-    app.innerHTML = chrome("/home") + `<main><div class="card"><div class="empty">
-      The CRM is restricted. Your roles do not carry any <span class="mono">crm.*</span> permission —
-      ask an administrator to assign you <b>CRM Sales User</b> or <b>CRM Administrator</b> in Setup → Users.
-      <div style="margin-top:.75rem">${link("/home", "Go to Product Lifecycle", "btn brand")}</div></div></div></main>`;
+    app.innerHTML = which === "crm"
+      ? restricted("The CRM", `Your roles do not carry a lead or CRM Setup permission — ask an administrator to assign
+          you <b>CRM Sales User</b> or <b>CRM Administrator</b> in Setup → Users.`)
+      : restricted("The Content Calendar", `Your roles do not carry a content permission — ask an administrator to
+          assign you <b>Content Manager</b>, or to grant the Content Calendar permissions, in Setup → Users.`);
     wireChrome(); return;
   }
   if (S.app === "crm" && !S.crm) await crmRefresh();
+  if (S.app === "content" && !S.content) await contentRefresh();
 
   let view = null;
   try {
@@ -400,6 +426,7 @@ export const renderInPlace = async () => { keepScroll = true; await render(); };
 export async function reboot(msg) {
   S.boot = await api("/bootstrap");
   if (S.crm) await crmRefresh();
+  if (S.content) await contentRefresh();
   if (msg) toast("ok", msg);
   await render();
 }
@@ -418,37 +445,46 @@ export const APPS = {
       ["/market", "Market Track"], ["/reports", "Reports"], ["/setup/users", "Setup", "setup"]]
   },
   crm: {
-    name: "CRM & Content", sub: "Leads, pipelines and the content calendar",
+    name: "CRM", sub: "Leads and pipelines",
     tabs: [["/crm/home", "Home"], ["/crm/leads", "Leads"], ["/crm/board", "Pipeline Board"],
-      ["/crm/calendar", "Content Calendar"], ["/crm/reports", "Reports"], ["/crm/setup", "Setup", "crmsetup"]]
+      ["/crm/reports", "Reports"], ["/crm/setup", "Setup", "crmsetup"]]
+  },
+  content: {
+    name: "Content Calendar", sub: "Targets, topics, stages and results",
+    tabs: [["/content/calendar", "Calendar"], ["/content/topics", "Map topics"], ["/content/tasks", "My tasks", "contentwork"],
+      ["/content/targets", "Targets"], ["/content/scorecard", "Scorecard"], ["/content/setup", "Setup", "contentsetup"]]
   }
 };
 const TABS = APPS.plm.tabs;
+/** Whether a tab flagged in APPS is open to the signed-in person. */
+const tabAllowed = t => t[2] === "setup" ? can("users.manage") || can("stagemodel.manage") || can("settings.manage")
+  : t[2] === "crmsetup" ? can("crm.setup.manage") : t[2] === "contentsetup" ? can("content.setup.manage")
+    : t[2] === "contentwork" ? can("crm.content.manage") : true;
+const SETUP_HREF = { plm: "/setup/users", crm: "/crm/setup", content: "/content/setup" };
+const SETUP_FLAG = { plm: "setup", crm: "crmsetup", content: "contentsetup" };
+const SEARCH_LABEL = { plm: "Search products", crm: "Search leads", content: "Search posts by topic, theme or keyword" };
 
 function chrome(raw) {
   const u = me();
   const d = S.dash;
   const queue = (d?.myQueue?.length || 0) + (d?.myConsults?.length || 0) + (d?.killQueue?.length || 0);
   const unread = (d?.notifications || []).filter(n => !n.read).length;
-  const prompts = S.crmDash?.kpi?.prompts || 0;
-  const setupAllowed = can("users.manage") || can("stagemodel.manage") || can("settings.manage");
-  const crmSetupAllowed = can("crm.setup.manage");
+  const badges = S.content?.badges || {};
   const app = APPS[S.app] || APPS.plm;
-  const allowTab = t => t[2] === "setup" ? setupAllowed : t[2] === "crmsetup" ? crmSetupAllowed : true;
   return `
   <header class="gheader">
     <button class="waffle" title="App launcher" data-act="launcher">${ICON.waffle}</button>
     <div class="brandmark">${ICON.product}<span>Assured</span></div>
     <div class="gsearch">
       ${ICON.search}
-      <input type="search" id="gsearch" placeholder="${S.app === "crm" ? "Search leads…" : "Search products…"}"
-        autocomplete="off" aria-label="${S.app === "crm" ? "Search leads" : "Search products"}">
+      <input type="search" id="gsearch" placeholder="${SEARCH_LABEL[S.app] || SEARCH_LABEL.plm}…"
+        autocomplete="off" aria-label="${SEARCH_LABEL[S.app] || SEARCH_LABEL.plm}">
       <div class="results" id="gresults" hidden></div>
     </div>
     <div class="gright">
       <button class="iconbtn" title="Notifications" data-act="bell">${ICON.bell}${unread ? `<span class="dot">${unread}</span>` : ""}</button>
-      ${(S.app === "crm" ? crmSetupAllowed : setupAllowed)
-        ? `<a class="iconbtn" href="#${S.app === "crm" ? "/crm/setup" : "/setup/users"}" title="Setup">${ICON.gear}</a>` : ""}
+      ${tabAllowed([null, null, SETUP_FLAG[S.app] || "setup"])
+        ? `<a class="iconbtn" href="#${SETUP_HREF[S.app] || SETUP_HREF.plm}" title="Setup">${ICON.gear}</a>` : ""}
       <button class="avatar" title="${esc(u.name)}" data-act="profile">${esc(initials(u.name))}</button>
     </div>
   </header>
@@ -456,17 +492,20 @@ function chrome(raw) {
     <button class="appname" data-act="launcher" title="Switch app">
       <b>${esc(app.name)}</b><span>${esc(setting("org_name", "Assured Grow Consultancy"))}</span></button>
     <div class="tabs">
-      ${app.tabs.filter(allowTab).map(([href, label]) => {
+      ${app.tabs.filter(tabAllowed).map(([href, label]) => {
         const active = raw === href || raw.startsWith(href + "/") ||
           (href === "/products" && raw.startsWith("/product/")) ||
           (href === "/reports" && raw.startsWith("/reports")) ||
           (href === "/setup/users" && raw.startsWith("/setup")) ||
           (href === "/crm/leads" && raw.startsWith("/crm/lead/")) ||
-          (href === "/crm/calendar" && raw.startsWith("/crm/content/")) ||
           (href === "/crm/reports" && raw.startsWith("/crm/reports")) ||
-          (href === "/crm/setup" && raw.startsWith("/crm/setup"));
-        const cnt = href === "/gates" && queue ? `<span class="cnt">${queue}</span>`
-          : href === "/crm/calendar" && prompts ? `<span class="cnt">${prompts}</span>` : "";
+          (href === "/crm/setup" && raw.startsWith("/crm/setup")) ||
+          (href === "/content/calendar" && (raw === "/content" || raw.startsWith("/content/item/")));
+        const n = href === "/gates" ? queue : href === "/content/calendar" ? badges.prompts
+          : href === "/content/topics" ? badges.topics : href === "/content/tasks" ? badges.overdue : 0;
+        const title = { "/content/calendar": "launch prompts from Product Lifecycle", "/content/topics": "slots in the look-ahead without a topic",
+          "/content/tasks": "of your stages are overdue" }[href];
+        const cnt = n ? `<span class="cnt ${href === "/content/tasks" ? "r" : ""}" ${title ? `title="${n} ${title}"` : ""}>${n}</span>` : "";
         return `<a href="#${href}" ${active ? 'aria-current="page"' : ""}>${esc(label)}${cnt}</a>`;
       }).join("")}
     </div>
@@ -480,7 +519,15 @@ function wireChrome() {
   const runSearch = async () => {
     const q = search.value.trim().toLowerCase();
     if (q.length < 2) { results.hidden = true; return; }
-    if (S.app === "crm") {
+    if (S.app === "content") {
+      const hits = await api("/content/search?q=" + encodeURIComponent(q));
+      if (search.value.trim().toLowerCase() !== q) return;            // a later keystroke has already searched
+      results.innerHTML = hits.length
+        ? hits.map(c => `<button data-href="/content/item/${c.id}"><div><b>${esc(c.title || "Open slot")}</b></div>
+            <div class="code">${esc(fmtDate(c.date))} · ${esc(c.account_name || "")} · ${esc(c.type_name || "")}${
+              c.cancelled_at ? " · cancelled" : c.published_on ? " · published" : ""}</div></button>`).join("")
+        : `<div class="empty" style="padding:1rem">No post matches “${esc(q)}”.</div>`;
+    } else if (S.app === "crm") {
       if (!leadCache) leadCache = await api("/crm/leads");
       const hits = leadCache.filter(l => (l.company + " " + (l.customer || "") + " " + (l.email || "") + " " +
         (l.offering_name || "")).toLowerCase().includes(q)).slice(0, 12);
@@ -540,13 +587,10 @@ function wireChrome() {
   document.querySelectorAll('[data-act="launcher"]').forEach(el => el.addEventListener("click", e => {
     const items = [{ header: "Apps" },
       { label: "Product Lifecycle — PLM", onClick: () => go("/home") }];
-    if (hasCRM()) items.push({ label: "CRM & Content Calendar", onClick: () => go("/crm/home") });
+    if (hasCRM()) items.push({ label: "CRM — leads and pipelines", onClick: () => go("/crm/home") });
+    if (hasContent()) items.push({ label: "Content Calendar", onClick: () => go("/content/calendar") });
     items.push("-", { header: (APPS[S.app] || APPS.plm).name });
-    for (const t of (APPS[S.app] || APPS.plm).tabs) {
-      if (t[2] === "setup" && !can("users.manage") && !can("stagemodel.manage") && !can("settings.manage")) continue;
-      if (t[2] === "crmsetup" && !can("crm.setup.manage")) continue;
-      items.push({ label: t[1], onClick: () => go(t[0]) });
-    }
+    for (const t of (APPS[S.app] || APPS.plm).tabs.filter(tabAllowed)) items.push({ label: t[1], onClick: () => go(t[0]) });
     openMenu(e.currentTarget, items);
   }));
 }
@@ -607,7 +651,8 @@ export async function boot() {
 window.addEventListener("hashchange", async () => {
   // Views read cached state, so refresh before painting: navigating is the natural moment to catch up
   // with what other people have changed. Silent, and a failure must never block the navigation.
-  try { await (S.app === "crm" ? crmRefresh() : refresh(true)); } catch { /* offline or signed out */ }
+  try { await (S.app === "crm" ? crmRefresh() : S.app === "content" ? contentRefresh() : refresh(true)); }
+  catch { /* offline or signed out */ }
   render();
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape") document.querySelectorAll(".menu").forEach(m => m.remove()); });

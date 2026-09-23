@@ -1,8 +1,13 @@
 // CRM — dashboard, lead register, lead record with the stage engine, pipeline board, reports.
 import {
   S, api, esc, fmtDate, fmtDT, money0, cur, can, me, ICON, toast, errToast, openForm, openPanel, openMenu,
-  confirmAction, dataTable, link, bar, statusBadge, refresh, go, render, renderInPlace, setting, initials, crmRefresh
+  confirmAction, dataTable, link, bar, statusBadge, refresh, go, render, renderInPlace, setting, initials, crmRefresh,
+  hasContent
 } from "./app.js";
+
+/** A post lives in the Content Calendar; it links there for anyone that application is open to. */
+const contentLink = (id, label, attrs = "") => hasContent()
+  ? `<a href="#/content/item/${id}" ${attrs}>${esc(label)}</a>` : esc(label);
 
 const crm = () => S.crm || {};
 const cdash = () => S.crmDash || {};
@@ -66,26 +71,12 @@ export async function dashboard() {
         </div>
       </div>
 
-      ${(d.prompts || []).length ? `<div class="card" style="border-left:3px solid var(--warn-line)">
-        <header><div class="ci" style="background:var(--warn-line)">${ICON.bell}</div>
-          <h2>From Product Lifecycle — launch content needed</h2>
-          <span class="sub">${d.prompts.length} product${d.prompts.length === 1 ? "" : "s"} entered Seeding</span>
-          <div class="right"><a class="btn sm" href="#/crm/calendar">Open the calendar</a></div></header>
-        <div class="body flush">${d.prompts.map(p => `
-          <div class="rrow">
-            <div class="ic" style="background:var(--warn-line)">${ICON.product}</div>
-            <div class="b"><b>${esc(p.title)}</b><div class="m">${esc(p.detail || "")}</div></div>
-            <div class="r">due ${fmtDate(p.due_date)}</div>
-          </div>`).join("")}</div>
-      </div>` : ""}
-
       <div class="kpis">
         ${kpi("", "Open leads", k.open ?? 0, `${k.total ?? 0} on file · ${k.lost ?? 0} lost`, "/crm/leads", "open")}
         ${kpi("g", "Past qualification", k.past_qualification ?? 0, "Qualified, CSE and Closed", "/crm/reports/CRM-01")}
         ${kpi("", "Content attributed", k.attributed ?? 0, `${k.published ?? 0} items published`, "/crm/reports/CRM-03")}
         ${kpi(k.blocked ? "r" : "n", "Blocked from next stage", k.blocked ?? 0, "missing a required field", "/crm/leads", "blocked")}
         ${kpi(k.unassigned ? "y" : "n", "No pipeline yet", k.unassigned ?? 0, "Offering and Industry both needed", "/crm/leads", "nopipe")}
-        ${kpi("n", "Content items", k.content ?? 0, `${k.prompts ?? 0} launch prompt${k.prompts === 1 ? "" : "s"} open`, "/crm/calendar")}
       </div>
 
       <div class="split">
@@ -216,7 +207,7 @@ export async function leads() {
       { label: "Annual value", align: "r",
         cell: l => l.est_annual_value != null ? `<b>${money0(l.est_annual_value)}</b>` : `<span style="color:var(--ink-4)">—</span>` },
       { label: "Activity", cell: l => l.primary_content_id
-        ? `<a href="#/crm/content/${l.primary_content_id}" class="trunc" style="max-width:12rem;display:inline-block">${esc(l.activity || "content")}</a>`
+        ? contentLink(l.primary_content_id, l.activity || "content", `class="trunc" style="max-width:12rem;display:inline-block"`)
         : esc(l.activity || "—") },
       { label: "Channel", cell: l => esc(l.channel_name || "—") },
       { label: "Lead Source", cell: l => sourcePill(l.effective_source) },
@@ -454,10 +445,9 @@ function detailTab(l, det) {
       case "source": return l.effective_source
         ? sourcePill(l.effective_source) + (l.source_override
           ? ` <span class="badge y">overridden</span>` : ` <span style="font-size:.6875rem;color:var(--ink-4)">derived from the channel</span>`) : "";
-      case "content": return l.primary_content_id
-        ? `<a href="#/crm/content/${l.primary_content_id}">${esc(l.primary_content_title || "content")}</a>` : "";
+      case "content": return l.primary_content_id ? contentLink(l.primary_content_id, l.primary_content_title || "content") : "";
       case "activity": return l.primary_content_id
-        ? `<a href="#/crm/content/${l.primary_content_id}">${esc(l.activity || l.primary_content_title || "content")}</a>`
+        ? contentLink(l.primary_content_id, l.activity || l.primary_content_title || "content")
           + (l.activity_channel_name ? ` <span class="badge">${esc(l.activity_channel_name)}</span>` : "")
         : esc(l.activity || "");
       case "value": return l.est_annual_value != null
@@ -510,10 +500,10 @@ function contentTab(l, det) {
     <div class="body flush">${det.touches.length ? det.touches.map(t => `
       <div class="rrow">
         <div class="ic" style="background:${t.colour || "var(--ink-4)"}">${ICON.doc}</div>
-        <div class="b"><b><a href="#/crm/content/${t.content_id}">${esc(t.title)}</a></b>
+        <div class="b"><b>${contentLink(t.content_id, t.title)}</b>
           ${t.is_primary ? ` <span class="badge b">primary</span>` : ` <span class="badge">touch</span>`}
-          <div class="m">${fmtDate(t.date)} · ${esc(t.type_name || "")} · ${esc(t.channel_name || "")} · ${esc(t.person_name || "")}
-            · <span class="badge ${t.status === "Published" ? "g" : ""}">${esc(t.status)}</span></div></div>
+          <div class="m">${fmtDate(t.date)} · ${esc(t.type_name || "")} · ${esc(t.channel_name || "")} · ${esc(t.account_name || "")}
+            · <span class="badge ${t.status === "Published" ? "g" : t.status === "Cancelled" ? "r" : ""}">${esc(t.status)}</span></div></div>
         ${can("crm.lead.manage") ? `<div class="r">
           ${t.is_primary ? "" : `<button class="btn sm" data-primary="${t.content_id}">Make primary</button> `}
           <button class="btn sm danger" data-detach="${t.content_id}">Detach</button></div>` : ""}
@@ -617,14 +607,11 @@ async function attemptMove(l, toSeq, stages) {
   }
 }
 
-/** The content items a lead's Activity Name may point at — fetched once per form, newest first. */
-async function contentChoices() {
-  const items = await api("/crm/content");
-  return items.map(c => ({
-    value: c.id, group: c.channel_id, label: `${c.title} — ${c.date}`,
-    hint: `${c.channel_name || "no channel"} · ${c.type_name || "no type"} · ${c.person_name || "no author"} · ${c.status}`
-  }));
-}
+/**
+ * The posts a lead's Activity Name may point at, newest first: every post with a topic that was not cancelled,
+ * listed once per platform it went out on, so a post on LinkedIn and YouTube is found under either.
+ */
+const contentChoices = () => api("/content/pickable");
 
 async function editLead(l, det) {
   const needsPicker = det.fields.some(f => f.type === "content");
@@ -637,7 +624,7 @@ async function editLead(l, det) {
       group: l.activity_channel_id ?? "", value: String(l.primary_content_id ?? ""),
       groupLabel: "Social channel", groupBlank: "Every channel",
       searchPlaceholder: "Search post names…", blank: "— no activity —",
-      emptyHint: "No content has been planned yet. Plan it on the Content Calendar and it appears here." };
+      emptyHint: "No post has a topic yet. Posts are planned in the Content Calendar and appear here once their topic is mapped." };
     if (f.type === "list") return { ...base, type: "select", options: opts(f.list_source, l[f.key + "_id"] ?? l[f.key]),
       value: String(l[({ industry: "industry_id", segment: "segment_id", offering: "offering_id",
         channel: "channel_id", owner: "owner_id" }[f.key]) || f.key] ?? "") };
@@ -707,16 +694,16 @@ async function attachContent(l, det) {
   const items = (await contentChoices()).filter(c => !attached.has(c.value));
   if (!items.length) {
     openPanel({
-      title: attached.size ? "Everything planned is already attached" : "No content has been planned yet",
+      title: attached.size ? "Everything planned is already attached" : "No post has a topic yet",
       size: "sm",
       html: `<div class="empty">${attached.size
-        ? "Every content item on the calendar is already a touch on this lead."
-        : "Content is planned on the Content Calendar. Plan it there and it becomes attachable here."}</div>`,
-      footer: `<button class="btn" data-close>Close</button>${can("crm.content.manage")
+        ? "Every post with a topic is already a touch on this lead."
+        : "Posts are planned in the Content Calendar. Once one has its topic, it becomes attachable here."}</div>`,
+      footer: `<button class="btn" data-close>Close</button>${hasContent()
         ? `<button class="btn brand" data-cal>Open the Content Calendar</button>` : ""}`
     });
     document.querySelector("[data-cal]")?.addEventListener("click", () => {
-      document.querySelector("dialog.modal")?.remove(); go("/crm/calendar");
+      document.querySelector("dialog.modal")?.remove(); go("/content/calendar");
     });
     return;
   }
